@@ -23,9 +23,17 @@
     <section class="tarjeta" aria-labelledby="titulo-configuracion">
       <div class="cabecera-tarjeta">
         <h2 id="titulo-configuracion">1. Configura el Enfoque y las Dimensiones</h2>
-        <button type="button" id="botonCargarEjemplo" class="boton boton-secundario">
-          Cargar Ejemplo (Talleres de Managua)
-        </button>
+        <div class="controles-pasos">
+          <select id="selectorEjemplo" class="input-nombre" aria-label="Seleccionar ejemplo predefinido">
+            <option value="managua">Talleres de Managua (3x3 Min)</option>
+            <option value="fabricas3x4">Fábricas y Almacenes (3x4 Clásico Min)</option>
+            <option value="maximizacion">Maximización de Utilidades (3x3 Max)</option>
+            <option value="prohibidas">Rutas Prohibidas y Desbalanceo (3x3 con M)</option>
+          </select>
+          <button type="button" id="botonCargarEjemplo" class="boton boton-secundario">
+            Cargar Ejemplo
+          </button>
+        </div>
       </div>
 
       <div class="rejilla-configuracion">

@@ -194,13 +194,13 @@ function actualizarResumenBalancePrevio() {
   const dif = redondearSiCero(Math.abs(sumaO - sumaD));
 
   if (esCero(sumaO) && esCero(sumaD)) {
-    caja.textContent = "[INFO] Ingresa las ofertas y demandas para verificar el balance del sistema en tiempo real.";
+    caja.textContent = "Ingresa las ofertas y demandas para verificar el balance del sistema en tiempo real.";
   } else if (esCero(dif)) {
-    caja.textContent = `[OK] Balance previo: Oferta total = ${formatearNumero(sumaO)} | Demanda total = ${formatearNumero(sumaD)}. El modelo está balanceado.`;
+    caja.textContent = `Balance previo: Oferta total = ${formatearNumero(sumaO)} | Demanda total = ${formatearNumero(sumaD)}. El modelo está balanceado.`;
   } else if (sumaO > sumaD) {
-    caja.textContent = `[INFO] Balance previo: Oferta (${formatearNumero(sumaO)}) > Demanda (${formatearNumero(sumaD)}). Al resolver se agregará un Destino Ficticio de ${formatearNumero(dif)}.`;
+    caja.textContent = `Balance previo: Oferta (${formatearNumero(sumaO)}) > Demanda (${formatearNumero(sumaD)}). Al resolver se agregará un Destino Ficticio de ${formatearNumero(dif)}.`;
   } else {
-    caja.textContent = `[INFO] Balance previo: Demanda (${formatearNumero(sumaD)}) > Oferta (${formatearNumero(sumaO)}). Al resolver se agregará un Origen Ficticio de ${formatearNumero(dif)}.`;
+    caja.textContent = `Balance previo: Demanda (${formatearNumero(sumaD)}) > Oferta (${formatearNumero(sumaO)}). Al resolver se agregará un Origen Ficticio de ${formatearNumero(dif)}.`;
   }
 }
 
@@ -584,9 +584,9 @@ function repararDegeneracionSiAplica(modelo, asignacion, basicas, pasos = null) 
 
       registrarPaso(pasos, {
         fase: "Ajuste de Degeneración",
-        titulo: `Celda básica auxiliar en (${modelo.nombresOrigenes[cand.i]} -> ${modelo.nombresDestinos[cand.j]})`,
-        explicacion: `Para mantener exactamente m + n - 1 = ${requeridas} variables básicas formando un árbol sin ciclos (indispensable para MODI), se marca esta celda con asignación 0 como básica.`,
-        formula: `Variables básicas = ${actuales} de ${requeridas}`,
+        titulo: `Celda básica auxiliar (ε) en (${modelo.nombresOrigenes[cand.i]} -> ${modelo.nombresDestinos[cand.j]})`,
+        explicacion: `El número de celdas básicas es menor que m + n - 1 = ${requeridas}. Para evitar degeneración y permitir resolver uᵢ + vⱼ = cᵢⱼ en MODI, se asigna un valor conceptual ε (≈ 0) en una celda independiente sin formar ciclos.`,
+        formula: `Básicas = ${actuales} de m + n - 1 = ${requeridas}  |  x = ε (≈ 0)`,
         asignacion,
         costos: modelo.costos,
         prohibidas: modelo.prohibidas
@@ -1186,20 +1186,20 @@ function construirFormulacion(modelo, metodo) {
   const sumaDemanda = redondearSiCero(modelo.demandas.reduce((acc, v) => acc + v, 0));
 
   const descripcionesMetodo = {
-    noroeste: "Esquina Noroeste: asigna desde (0,0) agotando oferta o demanda en cada paso.",
-    costoMenor: "Costo Menor: selecciona en cada iteración la celda activa más favorable.",
-    vogel: "Aproximación de Vogel (VAM): prioriza la línea con mayor penalización (2do mejor - 1er mejor).",
-    noroesteModi: "Esquina Noroeste + MODI: parte de la esquina noroeste y optimiza con u/v hasta optimalidad.",
-    costoMenorModi: "Costo Menor + MODI: parte del menor costo/mayor ganancia y optimiza con u/v hasta optimalidad.",
-    optimo: "Vogel + MODI: obtiene solución inicial por Vogel y optimiza hasta que Δ_ij >= 0."
+    noroeste: "Esquina Noroeste: asigna desde (1,1) agotando oferta aᵢ o demanda bⱼ en cada paso.",
+    costoMenor: "Costo Mínimo: selecciona en cada iteración la celda activa con menor costo unitario cᵢⱼ (o mayor utilidad).",
+    vogel: "Aproximación de Vogel (VAM): prioriza la fila o columna con mayor penalización (diferencia entre los 2 menores costos).",
+    noroesteModi: "Esquina Noroeste + MODI: parte de la esquina noroeste y optimiza con uᵢ + vⱼ = cᵢⱼ hasta Δᵢⱼ >= 0.",
+    costoMenorModi: "Costo Mínimo + MODI: parte del costo mínimo y optimiza con uᵢ + vⱼ = cᵢⱼ hasta Δᵢⱼ >= 0.",
+    optimo: "Vogel + MODI: obtiene solución inicial por Vogel y optimiza mediante uᵢ + vⱼ = cᵢⱼ hasta que Δᵢⱼ = cᵢⱼ - (uᵢ + vⱼ) >= 0."
   };
 
   const tipoObjTexto = modelo.objetivo === "maximizar" ? "Maximizar Z" : "Minimizar Z";
 
   return {
-    balance: `Σ O_i = ${formatearNumero(sumaOferta)}  vs.  Σ D_j = ${formatearNumero(sumaDemanda)}`,
+    balance: `Σ aᵢ (Oferta) = ${formatearNumero(sumaOferta)}  vs.  Σ bⱼ (Demanda) = ${formatearNumero(sumaDemanda)}`,
     objetivo: `${tipoObjTexto} = ${terminosObjetivo.join(" + ")}`,
-    restricciones: `Oferta: Σ_j x_ij = O_i  |  Demanda: Σ_i x_ij = D_j  |  x_ij >= 0`,
+    restricciones: `Oferta: Σⱼ xᵢⱼ = aᵢ (i=1..${modelo.ofertas.length})  |  Demanda: Σᵢ xᵢⱼ = bⱼ (j=1..${modelo.demandas.length})  |  xᵢⱼ >= 0`,
     metodo: descripcionesMetodo[metodo] || descripcionesMetodo.optimo
   };
 }
@@ -1265,7 +1265,7 @@ function renderizarResultados({
       if (asignacion[i][j] > EPS) {
         if (modelo.prohibidas[i][j]) {
           enviosDetalle.push(
-            `<li><strong>[ALERTA] ${escaparTexto(modelo.nombresOrigenes[i])} -> ${escaparTexto(modelo.nombresDestinos[j])}</strong>: ${formatearNumero(asignacion[i][j])} unidades en <strong>RUTA PROHIBIDA (M)</strong></li>`
+            `<li><strong>${escaparTexto(modelo.nombresOrigenes[i])} -> ${escaparTexto(modelo.nombresDestinos[j])}</strong>: ${formatearNumero(asignacion[i][j])} unidades en <strong>Ruta Prohibida (M)</strong></li>`
           );
         } else {
           const subtotal = redondearSiCero(asignacion[i][j] * modelo.costos[i][j]);
@@ -1279,15 +1279,15 @@ function renderizarResultados({
 
   const notaBalance = balanceadoOriginalmente
     ? ""
-    : `<p class="alerta alerta-aviso">[INFO] Nota: El modelo fue balanceado automáticamente agregando un nodo ficticio con valor 0.</p>`;
+    : `<p class="alerta alerta-aviso">Nota: El modelo fue balanceado automáticamente agregando un nodo ficticio con valor 0.</p>`;
 
   let notaEstado = "";
   if (invariantes.infactiblePorProhibidas) {
-    notaEstado = `<p class="alerta alerta-error">[ERROR] El modelo es INFACTIBLE bajo las restricciones de rutas prohibidas: requiere enviar flujo por una ruta marcada como M.</p>`;
+    notaEstado = `<p class="alerta alerta-error">El modelo es infactible bajo las restricciones de rutas prohibidas: requiere enviar flujo por una ruta marcada como M.</p>`;
   } else if (!invariantes.esValida) {
-    notaEstado = `<p class="alerta alerta-error">[ALERTA] Se detectaron incidencias de verificación: ${escaparTexto(invariantes.incidencias.join(" | "))}</p>`;
+    notaEstado = `<p class="alerta alerta-error">Se detectaron incidencias de verificación: ${escaparTexto(invariantes.incidencias.join(" | "))}</p>`;
   } else {
-    notaEstado = `<p class="alerta alerta-ok">[OK] Solución factible verificada (ofertas, demandas y estructura de árbol básico cumplidas).</p>`;
+    notaEstado = `<p class="alerta alerta-ok">Solución básica factible verificada (ofertas, demandas y condición m + n - 1 cumplidas).</p>`;
   }
 
   let notaAlternativos = "";
@@ -1295,7 +1295,7 @@ function renderizarResultados({
     const listaCeldas = optimosAlternativos
       .map((c) => `(${escaparTexto(modelo.nombresOrigenes[c.i])} -> ${escaparTexto(modelo.nombresDestinos[c.j])})`)
       .join(", ");
-    notaAlternativos = `<p class="alerta alerta-aviso">[INFO] Existen soluciones óptimas alternativas con el mismo valor total (Δ = 0 en: ${listaCeldas}).</p>`;
+    notaAlternativos = `<p class="alerta alerta-aviso">Existen soluciones óptimas alternativas con el mismo valor total (Δ = 0 en: ${listaCeldas}).</p>`;
   }
 
   document.getElementById("resumenSolucion").innerHTML = `
@@ -1319,10 +1319,10 @@ function renderizarResultados({
             : formatearNumero(Math.abs(r.valorTotal - comparativa.mejorValor));
         return `<tr>
           <td>${escaparTexto(r.nombre)}</td>
-          <td>${r.infactible ? "[INFACTIBLE]" : formatearNumero(r.valorTotal)}</td>
+          <td>${r.infactible ? "Infactible" : formatearNumero(r.valorTotal)}</td>
           <td>${r.iteracionesMODI}</td>
           <td>${dif}</td>
-          <td>${r.infactible ? "[ERROR]" : esOptimo ? "[OPTIMO]" : "[FACTIBLE]"}</td>
+          <td>${r.infactible ? "Infactible" : esOptimo ? "Óptimo" : "Factible"}</td>
         </tr>`;
       })
       .join("");
@@ -1511,8 +1511,8 @@ function ejecutarResolucion() {
   });
 }
 
-function cargarEjemploTalleresManagua() {
-  generarTablaEntrada({
+const EJEMPLOS_TRANSPORTE = {
+  managua: {
     objetivo: "minimizar",
     nombresOrigenes: ["Taller A", "Taller B", "Taller C"],
     nombresDestinos: ["Mercado Oriental", "Mercado Roberto Huembes", "Mercado Israel Lewites"],
@@ -1528,7 +1528,69 @@ function cargarEjemploTalleresManagua() {
     ],
     ofertas: [40, 35, 25],
     demandas: [30, 40, 30]
-  });
+  },
+  fabricas3x4: {
+    objetivo: "minimizar",
+    nombresOrigenes: ["Fábrica 1", "Fábrica 2", "Fábrica 3"],
+    nombresDestinos: ["Almacén 1", "Almacén 2", "Almacén 3", "Almacén 4"],
+    costos: [
+      [19, 30, 50, 10],
+      [70, 30, 40, 60],
+      [40, 8, 70, 20]
+    ],
+    prohibidas: [
+      [false, false, false, false],
+      [false, false, false, false],
+      [false, false, false, false]
+    ],
+    ofertas: [7, 9, 18],
+    demandas: [5, 8, 7, 14]
+  },
+  maximizacion: {
+    objetivo: "maximizar",
+    nombresOrigenes: ["Planta 1", "Planta 2", "Planta 3"],
+    nombresDestinos: ["Bodega 1", "Bodega 2", "Bodega 3"],
+    costos: [
+      [8, 5, 6],
+      [15, 10, 12],
+      [3, 9, 10]
+    ],
+    prohibidas: [
+      [false, false, false],
+      [false, false, false],
+      [false, false, false]
+    ],
+    ofertas: [120, 80, 80],
+    demandas: [150, 80, 50]
+  },
+  prohibidas: {
+    objetivo: "minimizar",
+    nombresOrigenes: ["Centro Norte", "Centro Sur", "Centro Este"],
+    nombresDestinos: ["Zona A", "Zona B", "Zona C"],
+    costos: [
+      [0, 6, 4],
+      [5, 3, 0],
+      [7, 4, 2]
+    ],
+    prohibidas: [
+      [true, false, false],
+      [false, false, true],
+      [false, false, false]
+    ],
+    ofertas: [30, 45, 35],
+    demandas: [35, 30, 25]
+  }
+};
+
+function cargarEjemploSeleccionado() {
+  const selector = document.getElementById("selectorEjemplo");
+  const clave = selector ? selector.value : "managua";
+  const datos = EJEMPLOS_TRANSPORTE[clave] || EJEMPLOS_TRANSPORTE.managua;
+  generarTablaEntrada(datos);
+}
+
+function cargarEjemploTalleresManagua() {
+  generarTablaEntrada(EJEMPLOS_TRANSPORTE.managua);
 }
 
 function limpiarCampos() {
@@ -1553,7 +1615,7 @@ if (typeof document !== "undefined") {
     generarTablaEntrada();
 
     document.getElementById("botonGenerarTabla").addEventListener("click", () => generarTablaEntrada());
-    document.getElementById("botonCargarEjemplo").addEventListener("click", cargarEjemploTalleresManagua);
+    document.getElementById("botonCargarEjemplo").addEventListener("click", cargarEjemploSeleccionado);
     document.getElementById("botonResolver").addEventListener("click", ejecutarResolucion);
     document.getElementById("botonLimpiar").addEventListener("click", limpiarCampos);
 
@@ -1601,6 +1663,7 @@ if (typeof module !== "undefined" && module.exports) {
     generarComparativaMetodos,
     calcularValorRealTotal,
     parsearCeldaMatriz,
-    validarModelo
+    validarModelo,
+    EJEMPLOS_TRANSPORTE
   };
 }
