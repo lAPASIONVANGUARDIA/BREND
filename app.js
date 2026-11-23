@@ -1409,12 +1409,6 @@ function renderizarContenedorPasos() {
         </button>
       </div>
     </div>
-    <div class="alerta alerta-info">
-      <strong>Cómo leer este proceso (navegable con teclado o toque, sin puntero):</strong>
-      Usa los botones <em>Paso Anterior</em> / <em>Paso Siguiente</em> (o las teclas Flecha Izquierda / Derecha).
-      1) <em>Balanceo</em> ajusta oferta y demanda. 2) <em>Solución Inicial</em> asigna una base factible.
-      3) <em>Degeneración</em> mantiene m + n - 1 básicas sin ciclos. 4) <em>MODI</em> evalúa u/v y Δ_ij hasta el óptimo.
-    </div>
   `;
 
   for (const paso of pasosAMostrar) {
