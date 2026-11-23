@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Resolvedor de Modelos de Transporte — Lógica y Paso a Paso</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="encabezado">
+    <div class="contenedor">
+      <p class="etiqueta-superior">Optimización de Redes y Logística</p>
+      <h1>Modelos de Transporte: Motor de Resolución y Aprendizaje</h1>
+      <p class="subtitulo">
+        Ingresa tus orígenes, destinos, ofertas, demandas y costos o utilidades unitarias (incluyendo rutas prohibidas).
+        El sistema valida los datos, verifica el balance, muestra las fórmulas en cada etapa y resuelve paso a paso o de forma global.
+      </p>
+    </div>
+  </header>
+
+  <main class="contenedor">
+    <!-- BLOQUE 1: CONFIGURACIÓN DE MODO, OBJETIVO, MÉTODO Y DIMENSIONES -->
+    <section class="tarjeta" aria-labelledby="titulo-configuracion">
+      <div class="cabecera-tarjeta">
+        <h2 id="titulo-configuracion">1. Configura el Enfoque y las Dimensiones</h2>
+        <button type="button" id="botonCargarEjemplo" class="boton boton-secundario">
+          Cargar Ejemplo (Talleres de Managua)
+        </button>
+      </div>
+
+      <div class="rejilla-configuracion">
+        <!-- Radio: Objetivo del modelo -->
+        <fieldset class="grupo-campo">
+          <legend>Objetivo de optimización</legend>
+          <label class="label-instruccion">
+            Elige si los valores de la matriz representan costos a minimizar o utilidades a maximizar.
+          </label>
+          <div class="opciones-radio">
+            <label class="opcion-radio">
+              <input type="radio" name="objetivoModelo" value="minimizar" checked />
+              <span>
+                <strong>Minimizar Costos (Min Z)</strong>
+                <small>Busca el plan de transporte con el menor costo total posible.</small>
+              </span>
+            </label>
+            <label class="opcion-radio">
+              <input type="radio" name="objetivoModelo" value="maximizar" />
+              <span>
+                <strong>Maximizar Utilidades / Ganancias (Max Z)</strong>
+                <small>Convierte a matriz de costo de oportunidad para hallar la mayor ganancia total.</small>
+              </span>
+            </label>
+          </div>
+        </fieldset>
+
+        <!-- Radio: Modo de resolución -->
+        <fieldset class="grupo-campo">
+          <legend>Modo de visualización y resolución</legend>
+          <label class="label-instruccion">
+            Elige si quieres ver el desglose conceptual paso a paso o solo la solución global directa.
+          </label>
+          <div class="opciones-radio">
+            <label class="opcion-radio">
+              <input type="radio" name="modoResolucion" value="guiado" checked />
+              <span>
+                <strong>Modo Guiado / Paso a Paso</strong>
+                <small>Explica conceptos, fórmulas, penalizaciones, ciclos y cada asignación.</small>
+              </span>
+            </label>
+            <label class="opcion-radio">
+              <input type="radio" name="modoResolucion" value="global" />
+              <span>
+                <strong>Modo Global / Directo</strong>
+                <small>Entrega el plan final de distribución, valor óptimo y resumen ejecutivo.</small>
+              </span>
+            </label>
+          </div>
+          <label class="opcion-checkbox" style="display:block; margin-top:0.5rem;">
+            <input type="checkbox" id="checkComparativa" checked />
+            <span>Mostrar tabla comparativa de todos los métodos (Noroeste, Costo Menor, Vogel y Óptimo MODI)</span>
+          </label>
+        </fieldset>
+
+        <!-- Radio: Método de solución -->
+        <fieldset class="grupo-campo">
+          <legend>Método o estrategia de solución</legend>
+          <label class="label-instruccion">
+            Selecciona una heurística inicial o la optimización completa garantizada con MODI.
+          </label>
+          <div class="opciones-radio">
+            <label class="opcion-radio">
+              <input type="radio" name="metodoResolucion" value="optimo" checked />
+              <span>
+                <strong>Solución Óptima (Vogel + MODI)</strong>
+                <small>Parte de Vogel y refina mediante multiplicadores u/v y ciclos cerrados.</small>
+              </span>
+            </label>
+            <label class="opcion-radio">
+              <input type="radio" name="metodoResolucion" value="noroesteModi" />
+              <span>
+                <strong>Esquina Noroeste + MODI</strong>
+                <small>Parte de Esquina Noroeste y optimiza con MODI hasta el óptimo global.</small>
+              </span>
+            </label>
+            <label class="opcion-radio">
+              <input type="radio" name="metodoResolucion" value="costoMenorModi" />
+              <span>
+                <strong>Costo Menor + MODI</strong>
+                <small>Parte de Costo Menor (o mayor ganancia) y optimiza con MODI.</small>
+              </span>
+            </label>
+            <label class="opcion-radio">
+              <input type="radio" name="metodoResolucion" value="vogel" />
+              <span>
+                <strong>Solo Aproximación de Vogel (VAM)</strong>
+                <small>Asigna según la mayor penalización (diferencia entre los 2 mejores valores).</small>
+              </span>
+            </label>
+            <label class="opcion-radio">
+              <input type="radio" name="metodoResolucion" value="costoMenor" />
+              <span>
+                <strong>Solo Método de Costo Menor</strong>
+                <small>Prioriza en cada paso la celda activa más favorable (sin fase MODI).</small>
+              </span>
+            </label>
+            <label class="opcion-radio">
+              <input type="radio" name="metodoResolucion" value="noroeste" />
+              <span>
+                <strong>Solo Esquina Noroeste</strong>
+                <small>Asigna secuencialmente desde la esquina superior izquierda (sin fase MODI).</small>
+              </span>
+            </label>
+          </div>
+        </fieldset>
+      </div>
+
+      <!-- Dimensiones dinámicas -->
+      <div class="barra-dimensiones">
+        <div class="campo-inline">
+          <label for="cantidadOrigenes">Cantidad de Orígenes (filas):</label>
+          <input type="number" id="cantidadOrigenes" min="1" max="10" value="3" />
+        </div>
+        <div class="campo-inline">
+          <label for="cantidadDestinos">Cantidad de Destinos (columnas):</label>
+          <input type="number" id="cantidadDestinos" min="1" max="10" value="3" />
+        </div>
+        <button type="button" id="botonGenerarTabla" class="boton boton-primario">
+          Generar Tabla de Entrada
+        </button>
+      </div>
+    </section>
+
+    <!-- BLOQUE 2: MATRIZ DE DATOS DEL USUARIO -->
+    <section class="tarjeta" aria-labelledby="titulo-matriz">
+      <div class="cabecera-tarjeta">
+        <div>
+          <h2 id="titulo-matriz">2. Ingresa los Datos del Problema</h2>
+          <label class="label-instruccion">
+            Escribe los nombres de orígenes y destinos, el costo o ganancia unitaria por celda (usa 0 si no hay costo,
+            o escribe <strong>M</strong> / <strong>X</strong> para indicar una ruta prohibida), la oferta de cada origen y la demanda de cada destino.
+          </label>
+        </div>
+      </div>
+
+      <div id="contenedorTablaEntrada" class="contenedor-tabla"></div>
+
+      <div id="estadoBalancePrevio" class="alerta alerta-info" aria-live="polite"></div>
+
+      <div id="mensajeValidacion" class="alerta alerta-error oculto" role="alert"></div>
+
+      <div class="acciones-resolver">
+        <button type="button" id="botonResolver" class="boton boton-exito">
+          Resolver Problema
+        </button>
+        <button type="button" id="botonLimpiar" class="boton boton-neutro">
+          Limpiar Valores
+        </button>
+      </div>
+    </section>
+
+    <!-- BLOQUE 3: CONCEPTOS, FÓRMULAS Y RESULTADOS -->
+    <section id="seccionResultados" class="tarjeta oculto" aria-labelledby="titulo-resultados">
+      <h2 id="titulo-resultados" tabindex="-1">3. Formulación, Lógica y Solución</h2>
+
+      <!-- Labels de conceptos y fórmulas dinámicas -->
+      <div class="panel-formulas">
+        <h3>Conceptos y Fórmulas Aplicadas</h3>
+        <div class="rejilla-formulas">
+          <div class="caja-formula">
+            <label class="etiqueta-formula">Condición de Balance</label>
+            <p id="formulaBalance" class="texto-formula"></p>
+          </div>
+          <div class="caja-formula">
+            <label class="etiqueta-formula">Función Objetivo</label>
+            <p id="formulaObjetivo" class="texto-formula"></p>
+          </div>
+          <div class="caja-formula">
+            <label class="etiqueta-formula">Restricciones de Oferta y Demanda</label>
+            <p id="formulaRestricciones" class="texto-formula"></p>
+          </div>
+          <div class="caja-formula">
+            <label class="etiqueta-formula">Regla del Método Seleccionado</label>
+            <p id="formulaMetodo" class="texto-formula"></p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Resumen Global -->
+      <div id="resumenSolucion" class="resumen-solucion"></div>
+
+      <!-- Comparativa de Métodos -->
+      <div id="contenedorComparativa" class="bloque-comparativa oculto"></div>
+
+      <!-- Tabla Final de Asignación -->
+      <div class="bloque-tabla-final">
+        <h3>Tabla Final de Asignación (Unidades Enviadas y Valor Unitario)</h3>
+        <label class="label-instruccion">
+          Cada celda muestra las unidades asignadas (xᵢⱼ) y su valor unitario (cᵢⱼ) o marca de ruta prohibida (M).
+        </label>
+        <div id="contenedorTablaFinal" class="contenedor-tabla"></div>
+      </div>
+
+      <!-- Desglose Paso a Paso (visible principalmente en Modo Guiado) -->
+      <div id="contenedorPasos" class="contenedor-pasos"></div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
