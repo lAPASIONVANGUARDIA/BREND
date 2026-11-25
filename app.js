@@ -10,8 +10,10 @@ const EPS = 1e-9;
 const estadoAplicacion = {
   indicePasoActual: 0,
   verTodosLosPasos: false,
+  varianteDiccionario: 0,
   ultimoModeloRender: null,
   ultimosPasosRender: [],
+  ultimoResumenContexto: null,
   ultimaConfiguracion: {
     objetivo: "minimizar",
     filas: 3,
@@ -1363,9 +1365,368 @@ function renderizarResultados({
     renderizarContenedorPasos();
   }
 
+  estadoAplicacion.ultimoResumenContexto = {
+    modelo,
+    estadoSolucion,
+    invariantes,
+    pasos,
+    metodo,
+    balanceadoOriginalmente
+  };
+  renderizarResumenFinalDetallado();
+
   seccion.scrollIntoView({ behavior: "smooth", block: "start" });
   const tituloRes = document.getElementById("titulo-resultados");
   if (tituloRes) tituloRes.focus({ preventScroll: true });
+}
+
+/* ---------- 7B. DICCIONARIOS DINÁMICOS Y RESUMEN FINAL DETALLADO ---------- */
+
+const DICCIONARIO_NARRATIVO = {
+  balanceoEquilibrado: [
+    (d) =>
+      `1. Balanceo del modelo: Al sumar las disponibilidades y requerimientos se obtuvo Σ aᵢ = ${d.sumaOferta} y Σ bⱼ = ${d.sumaDemanda}. Como ambas cantidades coinciden exactamente, el sistema se encuentra equilibrado y no requiere nodos ficticios.`,
+    (d) =>
+      `1. Verificación de equilibrio: La oferta agregada (${d.sumaOferta} unidades) iguala a la demanda total (${d.sumaDemanda} unidades). Gracias a este balance directo, la matriz original trabaja sin filas ni columnas auxiliares.`,
+    (d) =>
+      `1. Consistencia oferta-demanda: Se comprobó la condición Σ aᵢ = Σ bⱼ (${d.sumaOferta} = ${d.sumaDemanda}), confirmando un modelo balanceado de forma nativa.`
+  ],
+  balanceoFicticioDestino: [
+    (d) =>
+      `1. Balanceo con Destino Ficticio: La oferta total (${d.sumaOferta}) supera a la demanda total (${d.sumaDemanda}) por ${d.diferencia} unidades. Por ello se incorporó la columna "Destino Ficticio" con demanda ${d.diferencia} y costo unitario 0 (fórmula: b_fic = ${d.sumaOferta} - ${d.sumaDemanda} = ${d.diferencia}).`,
+    (d) =>
+      `1. Ajuste por exceso de oferta: Al existir un excedente de ${d.diferencia} unidades (${d.sumaOferta} disponibles frente a ${d.sumaDemanda} requeridas), se añadió un Destino Ficticio de demanda ${d.diferencia} y coeficiente 0 para absorber el sobrante sin distorsionar el cálculo.`,
+    (d) =>
+      `1. Equilibrio del sistema: Como Σ aᵢ > Σ bⱼ (${d.sumaOferta} > ${d.sumaDemanda}), se balanceó la red creando el nodo "Destino Ficticio" con ${d.diferencia} unidades y costo nulo.`
+  ],
+  balanceoFicticioOrigen: [
+    (d) =>
+      `1. Balanceo con Origen Ficticio: La demanda total (${d.sumaDemanda}) supera a la oferta total (${d.sumaOferta}) por ${d.diferencia} unidades. Se agregó la fila "Origen Ficticio" con oferta ${d.diferencia} y costo unitario 0 (fórmula: a_fic = ${d.sumaDemanda} - ${d.sumaOferta} = ${d.diferencia}).`,
+    (d) =>
+      `1. Ajuste por déficit de oferta: Para cubrir la brecha de ${d.diferencia} unidades entre demanda (${d.sumaDemanda}) y oferta (${d.sumaOferta}), se creó un Origen Ficticio con capacidad ${d.diferencia} y valor unitario 0.`,
+    (d) =>
+      `1. Equilibrio del sistema: Dado que Σ bⱼ > Σ aᵢ (${d.sumaDemanda} > ${d.sumaOferta}), se incorporó el nodo "Origen Ficticio" con ${d.diferencia} unidades para igualar ambos totales en ${d.sumaDemanda}.`
+  ],
+  conversionMaximizacion: [
+    (d) =>
+      `2. Conversión de Maximización: Se identificó la utilidad máxima V_max = ${d.maxValorReal} y se transformó la matriz mediante c'ᵢⱼ = ${d.maxValorReal} - pᵢⱼ para aplicar minimización equivalente de costo de oportunidad (evaluando al final sobre los valores reales pᵢⱼ).`,
+    (d) =>
+      `2. Transformación del objetivo: Para maximizar la ganancia usando el motor de transporte, cada utilidad pᵢⱼ se convirtió en pérdida relativa c'ᵢⱼ = ${d.maxValorReal} - pᵢⱼ tomando como referencia V_max = ${d.maxValorReal}.`,
+    (d) =>
+      `2. Equivalencia matemática (Max -> Min): Con V_max = ${d.maxValorReal}, se construyó la matriz auxiliar c'ᵢⱼ = V_max - pᵢⱼ; minimizar esta matriz garantiza encontrar el plan que maximiza la utilidad real.`
+  ],
+  noroeste: [
+    (d) =>
+      `Solución inicial por Esquina Noroeste: Se partió de la celda superior izquierda siguiendo la regla posicional xᵢⱼ = min(aᵢ, bⱼ) en ${d.cantidadPasos} paso(s), iniciando en ${d.primerPaso}. Las asignaciones obtenidas fueron: ${d.resumenAsignaciones}, alcanzando un valor inicial de Z = ${d.valorInicial}.`,
+    (d) =>
+      `Fase inicial (Esquina Noroeste): Recorriendo la tabla de izquierda a derecha y de arriba hacia abajo sin evaluar costos unitarios (${d.cantidadPasos} asignaciones desde ${d.primerPaso}), se obtuvo la base inicial: ${d.resumenAsignaciones}, con total Z = ${d.valorInicial}.`,
+    (d) =>
+      `Construcción por Esquina Noroeste: Aplicando agotamiento secuencial de filas y columnas a partir de ${d.primerPaso}, se definieron ${d.cantidadPasos} envíos iniciales (${d.resumenAsignaciones}), resultando en Z = ${d.valorInicial}.`
+  ],
+  costoMenor: [
+    (d) =>
+      `Solución inicial por Costo Mínimo: En cada ronda se seleccionó la celda activa más favorable (menor costo equivalente, iniciando en ${d.primerPaso}), completando ${d.cantidadPasos} asignaciones: ${d.resumenAsignaciones}, con un valor inicial de Z = ${d.valorInicial}.`,
+    (d) =>
+      `Fase inicial (Costo Mínimo): Priorizando las rutas de menor valor unitario en ${d.cantidadPasos} pasos (comenzando por ${d.primerPaso}), se construyó la distribución: ${d.resumenAsignaciones}, obteniendo Z = ${d.valorInicial}.`,
+    (d) =>
+      `Construcción voraz (Costo Mínimo): Se asignó el máximo posible xᵢⱼ = min(aᵢ, bⱼ) en las celdas más económicas desde ${d.primerPaso}, quedando ${d.resumenAsignaciones} con total inicial Z = ${d.valorInicial}.`
+  ],
+  vogel: [
+    (d) =>
+      `Solución inicial por Aproximación de Vogel (VAM): Se calcularon las penalizaciones (diferencia entre los 2 menores valores por fila y columna) en ${d.cantidadPasos} paso(s), iniciando en ${d.primerPaso}. Esto generó la base: ${d.resumenAsignaciones}, con Z = ${d.valorInicial}.`,
+    (d) =>
+      `Fase inicial (Vogel / VAM): Evaluando el costo de oportunidad en cada fila y columna activa desde ${d.primerPaso}, se realizaron ${d.cantidadPasos} asignaciones (${d.resumenAsignaciones}), logrando un punto de partida de Z = ${d.valorInicial}.`,
+    (d) =>
+      `Construcción por penalizaciones (Vogel): Al elegir en cada iteración la línea con mayor penalización y asignar a su mejor celda (empezando por ${d.primerPaso}), se obtuvo ${d.resumenAsignaciones} con valor Z = ${d.valorInicial}.`
+  ],
+  degeneracion: [
+    (d) =>
+      `Ajuste de degeneración (m + n - 1): Como la base inicial tuvo menos de ${d.requeridas} variables básicas, se incorporaron ${d.cantidadEpsilon} celda(s) independiente(s) con valor ε ≈ 0 en ${d.celdasEpsilon} sin cerrar ciclos, garantizando poder resolver uᵢ + vⱼ = cᵢⱼ.`,
+    (d) =>
+      `Resolución de degeneración: Para completar las m + n - 1 = ${d.requeridas} celdas básicas requeridas por MODI, se marcaron ${d.cantidadEpsilon} celda(s) auxiliar(es) con flujo nulo ε en ${d.celdasEpsilon} preservando la estructura de árbol sin ciclos.`,
+    (d) =>
+      `Mantenimiento de base acíclica: Se añadieron ${d.cantidadEpsilon} asignación(es) conceptual(es) ε (≈ 0) en ${d.celdasEpsilon} para alcanzar exactamente ${d.requeridas} variables básicas y evitar indeterminaciones en los multiplicadores.`
+  ],
+  modi: [
+    (d) =>
+      `Optimización con MODI (uᵢ + vⱼ = cᵢⱼ): Se ejecutaron ${d.iteraciones} iteración(es) de mejora (${d.detalleIteraciones}). En la evaluación final con multiplicadores ${d.multiplicadoresFinales}, todas las celdas vacías cumplieron Δᵢⱼ = cᵢⱼ - (uᵢ + vⱼ) >= 0, confirmando el valor final Z = ${d.valorFinal}.`,
+    (d) =>
+      `Fase de optimalidad (MODI): Mediante los multiplicadores ${d.multiplicadoresFinales} y la prueba de costos marginales Δᵢⱼ >= 0 tras ${d.iteraciones} pivote(s) en ciclo cerrado (${d.detalleIteraciones}), se alcanzó el resultado óptimo Z = ${d.valorFinal}.`,
+    (d) =>
+      `Refinamiento exacto con MODI: Después de ${d.iteraciones} ajuste(s) sobre ciclos alternantes (+ / -) (${d.detalleIteraciones}), los potenciales finales ${d.multiplicadoresFinales} verificaron que ningún intercambio mejora el total Z = ${d.valorFinal}.`
+  ],
+  cierreOptimo: [
+    (d) =>
+      `Conclusión del resultado: El plan final establece ${d.objetivoTexto} = ${d.valorTotal} mediante la suma ${d.formulaSumaTotal}, distribuyendo las unidades en: ${d.rutasActivasTexto}.${d.textoAlternativos}`,
+    (d) =>
+      `Síntesis final: Aplicando la función objetivo (${d.formulaSumaTotal}), se obtiene ${d.objetivoTexto} = ${d.valorTotal} con las rutas activas: ${d.rutasActivasTexto}.${d.textoAlternativos}`,
+    (d) =>
+      `Resumen ejecutivo: La solución final reporta ${d.objetivoTexto} = ${d.valorTotal} (${d.formulaSumaTotal}) cubriendo todas las ofertas y demandas mediante: ${d.rutasActivasTexto}.${d.textoAlternativos}`
+  ],
+  cierreInfactible: [
+    (d) =>
+      `Conclusión de factibilidad: El modelo resultó infactible porque bajo las restricciones actuales de oferta, demanda y rutas prohibidas (M) se requiere enviar flujo por rutas bloqueadas (${d.rutasProhibidasUsadas}).`,
+    (d) =>
+      `Resultado infactible: No existe una asignación válida que evite las rutas marcadas con M; el flujo quedó retenido en ${d.rutasProhibidasUsadas}.`,
+    (d) =>
+      `Diagnóstico de infactibilidad: Las rutas prohibidas (M) impiden satisfacer simultáneamente ofertas y demandas sin utilizar enlaces bloqueados (${d.rutasProhibidasUsadas}).`
+  ]
+};
+
+function elegirPlantillaDiccionario(claveProceso, varianteIdx) {
+  const lista = DICCIONARIO_NARRATIVO[claveProceso];
+  if (!lista || lista.length === 0) return () => "";
+  const idx = Math.abs(varianteIdx) % lista.length;
+  return lista[idx];
+}
+
+function construirResumenNarrativoDinamico({ modelo, estadoSolucion, invariantes, pasos, metodo, varianteIdx = 0 }) {
+  const parrafos = [];
+  const sumaOferta = formatearNumero(modelo.ofertas.reduce((acc, v) => acc + v, 0));
+  const sumaDemanda = formatearNumero(modelo.demandas.reduce((acc, v) => acc + v, 0));
+
+  // 1. Balanceo (aislado)
+  const pasoBalance = pasos.find((p) => p.fase === "Balanceo");
+  const totalOfertaNum = redondearSiCero(modelo.ofertas.reduce((acc, v) => acc + v, 0));
+  const totalDemandaNum = redondearSiCero(modelo.demandas.reduce((acc, v) => acc + v, 0));
+
+  if (pasoBalance && pasoBalance.titulo.includes("Destino Ficticio")) {
+    const difNum = modelo.demandas[modelo.demandas.length - 1];
+    parrafos.push(
+      elegirPlantillaDiccionario("balanceoFicticioDestino", varianteIdx)({
+        sumaOferta: formatearNumero(totalOfertaNum),
+        sumaDemanda: formatearNumero(redondearSiCero(totalOfertaNum - difNum)),
+        diferencia: formatearNumero(difNum)
+      })
+    );
+  } else if (pasoBalance && pasoBalance.titulo.includes("Origen Ficticio")) {
+    const difNum = modelo.ofertas[modelo.ofertas.length - 1];
+    parrafos.push(
+      elegirPlantillaDiccionario("balanceoFicticioOrigen", varianteIdx)({
+        sumaOferta: formatearNumero(redondearSiCero(totalDemandaNum - difNum)),
+        sumaDemanda: formatearNumero(totalDemandaNum),
+        diferencia: formatearNumero(difNum)
+      })
+    );
+  } else {
+    parrafos.push(
+      elegirPlantillaDiccionario("balanceoEquilibrado", varianteIdx)({
+        sumaOferta,
+        sumaDemanda
+      })
+    );
+  }
+
+  // 2. Conversión si es maximización (aislado)
+  if (modelo.objetivo === "maximizar") {
+    parrafos.push(
+      elegirPlantillaDiccionario("conversionMaximizacion", varianteIdx)({
+        maxValorReal: formatearNumero(modelo.maxValorReal)
+      })
+    );
+  }
+
+  // 3. Método inicial (estrictamente separado por método, imposible cruzar diccionarios)
+  let claveMetodoInicial = "vogel";
+  let nombreFaseInicial = "Aproximación de Vogel";
+  if (metodo === "noroeste" || metodo === "noroesteModi") {
+    claveMetodoInicial = "noroeste";
+    nombreFaseInicial = "Esquina Noroeste";
+  } else if (metodo === "costoMenor" || metodo === "costoMenorModi") {
+    claveMetodoInicial = "costoMenor";
+    nombreFaseInicial = "Costo Menor";
+  }
+
+  const pasosIniciales = pasos.filter((p) => p.fase === nombreFaseInicial);
+  if (pasosIniciales.length > 0) {
+    const primerPaso = pasosIniciales[0].titulo;
+    const ultimoPasoInicial = pasosIniciales[pasosIniciales.length - 1];
+    const valorInicial = formatearNumero(ultimoPasoInicial.costoAcumulado ?? 0);
+    const resumenAsignaciones = pasosIniciales.map((p) => p.titulo.replace(/^Asignar\s+|^Asignación directa\s+/i, "")).join("; ");
+    parrafos.push(
+      elegirPlantillaDiccionario(claveMetodoInicial, varianteIdx)({
+        cantidadPasos: pasosIniciales.length,
+        primerPaso,
+        resumenAsignaciones,
+        valorInicial
+      })
+    );
+  }
+
+  // 4. Degeneración si existió (aislado)
+  const pasosDeg = pasos.filter((p) => p.fase === "Ajuste de Degeneración");
+  if (pasosDeg.length > 0) {
+    const requeridas = modelo.ofertas.length + modelo.demandas.length - 1;
+    const celdasEpsilon = pasosDeg
+      .map((p) => {
+        const match = p.titulo.match(/\(([^)]+)\)$/);
+        return match ? `(${match[1]})` : p.titulo;
+      })
+      .join(", ");
+    parrafos.push(
+      elegirPlantillaDiccionario("degeneracion", varianteIdx)({
+        requeridas,
+        cantidadEpsilon: pasosDeg.length,
+        celdasEpsilon
+      })
+    );
+  }
+
+  // 5. MODI si aplicó (aislado)
+  const usaModi = metodo === "optimo" || metodo === "noroesteModi" || metodo === "costoMenorModi";
+  if (usaModi) {
+    const pasosModi = pasos.filter((p) => p.fase === "Optimización MODI");
+    const pasosIter = pasosModi.filter((p) => p.titulo.startsWith("Iteración"));
+    const pasoOpt = pasosModi.find((p) => p.titulo.includes("Solución óptima"));
+    const multMatch = pasoOpt?.formula?.match(/u = \[[^\]]+\]\s*\|\s*v = \[[^\]]+\]/);
+    const multiplicadoresFinales = multMatch ? multMatch[0] : "uᵢ, vⱼ verificados";
+    const detalleIteraciones =
+      pasosIter.length > 0
+        ? pasosIter.map((p) => `${p.titulo} [${p.formula.split("|").slice(0, 2).join("|").trim()}]`).join("; ")
+        : "la solución inicial ya cumplía Δᵢⱼ >= 0 sin requerir pivotes";
+    const valorFinal = formatearNumero(
+      calcularValorRealTotal(estadoSolucion.asignacion, modelo.costos, modelo.prohibidas)
+    );
+
+    parrafos.push(
+      elegirPlantillaDiccionario("modi", varianteIdx)({
+        iteraciones: pasosIter.length,
+        detalleIteraciones,
+        multiplicadoresFinales,
+        valorFinal
+      })
+    );
+  }
+
+  // 6. Cierre final con valores reales (aislado)
+  const rutasActivas = [];
+  const rutasProhibidasUsadas = [];
+  const terminosSuma = [];
+  const productosSuma = [];
+
+  for (let i = 0; i < modelo.nombresOrigenes.length; i++) {
+    for (let j = 0; j < modelo.nombresDestinos.length; j++) {
+      const x = estadoSolucion.asignacion[i][j];
+      if (x > EPS) {
+        if (modelo.prohibidas[i][j]) {
+          rutasProhibidasUsadas.push(`x_${i + 1}${j + 1} (${modelo.nombresOrigenes[i]} -> ${modelo.nombresDestinos[j]}) = ${formatearNumero(x)}`);
+        } else {
+          const c = modelo.costos[i][j];
+          const sub = redondearSiCero(x * c);
+          rutasActivas.push(`x_${i + 1}${j + 1} (${modelo.nombresOrigenes[i]} -> ${modelo.nombresDestinos[j]}) = ${formatearNumero(x)}`);
+          terminosSuma.push(`(${formatearNumero(x)} × ${formatearNumero(c)})`);
+          productosSuma.push(formatearNumero(sub));
+        }
+      }
+    }
+  }
+
+  const valorTotal = formatearNumero(
+    calcularValorRealTotal(estadoSolucion.asignacion, modelo.costos, modelo.prohibidas)
+  );
+  const objetivoTexto = modelo.objetivo === "maximizar" ? "Ganancia Total (Z)" : "Costo Total (Z)";
+  const formulaSumaTotal =
+    terminosSuma.length > 0
+      ? `Z = ${terminosSuma.join(" + ")} = ${productosSuma.join(" + ")} = ${valorTotal}`
+      : `Z = ${valorTotal}`;
+
+  if (invariantes.infactiblePorProhibidas) {
+    parrafos.push(
+      elegirPlantillaDiccionario("cierreInfactible", varianteIdx)({
+        rutasProhibidasUsadas: rutasProhibidasUsadas.join(", ")
+      })
+    );
+  } else {
+    const alts = estadoSolucion.optimosAlternativos || [];
+    const textoAlternativos =
+      alts.length > 0
+        ? ` Nota: Existen ${alts.length} ruta(s) no básica(s) con Δ = 0, por lo que hay soluciones óptimas alternativas con el mismo total.`
+        : "";
+    parrafos.push(
+      elegirPlantillaDiccionario("cierreOptimo", varianteIdx)({
+        objetivoTexto,
+        valorTotal,
+        formulaSumaTotal,
+        rutasActivasTexto: rutasActivas.join(", "),
+        textoAlternativos
+      })
+    );
+  }
+
+  return {
+    parrafos,
+    formulaSumaTotal,
+    valorTotal,
+    objetivoTexto
+  };
+}
+
+function renderizarResumenFinalDetallado() {
+  const contenedor = document.getElementById("resumenFinalDetallado");
+  const ctx = estadoAplicacion.ultimoResumenContexto;
+  if (!contenedor || !ctx) return;
+
+  const { modelo, estadoSolucion, invariantes, pasos, metodo } = ctx;
+  const { asignacion } = estadoSolucion;
+  const etiquetaUnit = modelo.objetivo === "maximizar" ? "utilidad" : "costo";
+
+  let cardsVariables = "";
+  for (let i = 0; i < modelo.nombresOrigenes.length; i++) {
+    for (let j = 0; j < modelo.nombresDestinos.length; j++) {
+      const val = asignacion[i][j];
+      const esProhibida = modelo.prohibidas[i][j];
+      const esBasica = estadoSolucion.basicas?.[i]?.[j] ?? false;
+      const claseVar = val > EPS ? "variable-activa" : "variable-cero";
+      const sub = esProhibida ? "Ruta M" : formatearNumero(redondearSiCero(val * modelo.costos[i][j]));
+      const infoBasica = val <= EPS && esBasica ? " (básica ε)" : "";
+
+      cardsVariables += `
+        <div class="tarjeta-variable ${claseVar}">
+          <strong>x<sub>${i + 1}${j + 1}</sub> = ${formatearNumero(val)}${infoBasica}</strong>
+          <div>${escaparTexto(modelo.nombresOrigenes[i])} &rarr; ${escaparTexto(modelo.nombresDestinos[j])}</div>
+          <div>${esProhibida ? "Ruta prohibida (M)" : `${etiquetaUnit}: ${formatearNumero(modelo.costos[i][j])} | subtotal: ${sub}`}</div>
+        </div>
+      `;
+    }
+  }
+
+  const narrativa = construirResumenNarrativoDinamico({
+    modelo,
+    estadoSolucion,
+    invariantes,
+    pasos,
+    metodo,
+    varianteIdx: estadoAplicacion.varianteDiccionario
+  });
+
+  const parrafosHtml = narrativa.parrafos
+    .map((p) => `<p class="parrafo-narrativo">${escaparTexto(p)}</p>`)
+    .join("");
+
+  contenedor.innerHTML = `
+    <div class="cabecera-pasos">
+      <h3>4. Resumen Final: Variables de Decisión, Total y Explicación</h3>
+      <button type="button" id="btnCambiarRedaccion" class="boton boton-secundario">
+        Cambiar redacción de la explicación
+      </button>
+    </div>
+
+    <h4>Valor de cada variable (xᵢⱼ)</h4>
+    <div class="rejilla-variables">${cardsVariables}</div>
+
+    <h4>${escaparTexto(narrativa.objetivoTexto)}</h4>
+    <p class="formula-paso">${escaparTexto(narrativa.formulaSumaTotal)}</p>
+
+    <div class="bloque-narrativa">
+      <h4>Explicación detallada del procedimiento</h4>
+      ${parrafosHtml}
+    </div>
+  `;
+
+  document.getElementById("btnCambiarRedaccion")?.addEventListener("click", () => {
+    estadoAplicacion.varianteDiccionario++;
+    renderizarResumenFinalDetallado();
+  });
 }
 
 function renderizarContenedorPasos() {
@@ -1664,6 +2025,8 @@ if (typeof module !== "undefined" && module.exports) {
     calcularValorRealTotal,
     parsearCeldaMatriz,
     validarModelo,
-    EJEMPLOS_TRANSPORTE
+    EJEMPLOS_TRANSPORTE,
+    DICCIONARIO_NARRATIVO,
+    construirResumenNarrativoDinamico
   };
 }
