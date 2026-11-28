@@ -905,39 +905,47 @@ function calcularMultiplicadoresMODI(costosOpt, basicas) {
 function encontrarCicloCerrado(basicas, inicioFila, inicioCol) {
   const m = basicas.length;
   const n = basicas[0].length;
+  const camino = [{ i: inicioFila, j: inicioCol }];
+  const visitados = new Set([`${inicioFila},${inicioCol}`]);
 
-  function buscar(camino, buscarHorizontal) {
+  function buscar(buscarHorizontal) {
     const actual = camino[camino.length - 1];
 
     if (buscarHorizontal) {
       for (let j = 0; j < n; j++) {
         if (j === actual.j) continue;
         if (camino.length >= 4 && actual.i === inicioFila && j === inicioCol) {
-          return camino;
+          return [...camino];
         }
-        const esValida = basicas[actual.i][j];
-        if (esValida && !camino.some((p) => p.i === actual.i && p.j === j)) {
-          const res = buscar([...camino, { i: actual.i, j }], false);
+        const clave = `${actual.i},${j}`;
+        if (basicas[actual.i][j] && !visitados.has(clave)) {
+          visitados.add(clave);
+          camino.push({ i: actual.i, j });
+          const res = buscar(false);
           if (res) return res;
+          camino.pop();
         }
       }
     } else {
       for (let i = 0; i < m; i++) {
         if (i === actual.i) continue;
         if (camino.length >= 4 && i === inicioFila && actual.j === inicioCol) {
-          return camino;
+          return [...camino];
         }
-        const esValida = basicas[i][actual.j];
-        if (esValida && !camino.some((p) => p.i === i && p.j === actual.j)) {
-          const res = buscar([...camino, { i, j: actual.j }], true);
+        const clave = `${i},${actual.j}`;
+        if (basicas[i][actual.j] && !visitados.has(clave)) {
+          visitados.add(clave);
+          camino.push({ i, j: actual.j });
+          const res = buscar(true);
           if (res) return res;
+          camino.pop();
         }
       }
     }
     return null;
   }
 
-  return buscar([{ i: inicioFila, j: inicioCol }], true);
+  return buscar(true);
 }
 
 function optimizarConMODI(modelo, estadoInicial, pasos = null) {
@@ -2542,40 +2550,197 @@ function exportarResultadosExcel() {
   setTimeout(() => URL.revokeObjectURL(url), 5000);
 }
 
-/* ---------- EXPORTACIÓN COMPLETA Y ORDENADA A PDF ---------- */
+/* ---------- EXPORTACIÓN COMPLETA Y ORDENADA A PDF (MULTI-DISPOSITIVO / iOS) ---------- */
 
-function exportarResultadosPDF() {
-  const ctx = estadoAplicacion.ultimoResumenContexto;
-  if (!ctx) return;
+function crearTablaPdfHtml(modelo, asignacion) {
+  const colsTotales = modelo.nombresDestinos.length + 2;
+  const claseCompacta = colsTotales >= 7 ? " pdf-tabla-compacta" : "";
+  let html = `<table class="pdf-tabla${claseCompacta}"><thead><tr><th>Origen \\ Destino</th>`;
+  for (const dest of modelo.nombresDestinos) {
+    html += `<th>${escaparTexto(dest)}</th>`;
+  }
+  html += `<th>Oferta</th></tr></thead><tbody>`;
 
-  const encImpresion = document.getElementById("encabezadoImpresion");
-  if (encImpresion) {
-    const fecha = new Date().toLocaleString("es-MX");
-    encImpresion.innerHTML = `
+  for (let i = 0; i < modelo.nombresOrigenes.length; i++) {
+    html += `<tr><th>${escaparTexto(modelo.nombresOrigenes[i])}</th>`;
+    for (let j = 0; j < modelo.nombresDestinos.length; j++) {
+      const val = asignacion[i][j];
+      const esProh = modelo.prohibidas[i][j];
+      const cls = esProh ? "pdf-celda-prohibida" : val > EPS ? "pdf-celda-activa" : "";
+      const cTxt = esProh ? "M" : formatearNumero(modelo.costos[i][j]);
+      html += `<td class="${cls}"><strong>${formatearNumero(val)}</strong><br/><small>(${cTxt})</small></td>`;
+    }
+    html += `<th>${formatearNumero(modelo.ofertas[i])}</th></tr>`;
+  }
+
+  const total = redondearSiCero(modelo.ofertas.reduce((a, b) => a + b, 0));
+  html += `<tr><th>Demanda</th>`;
+  for (const d of modelo.demandas) {
+    html += `<th>${formatearNumero(d)}</th>`;
+  }
+  html += `<th>${formatearNumero(total)}</th></tr></tbody></table>`;
+  return html;
+}
+
+function construirReportePdfHtml(ctx) {
+  const { modelo, estadoSolucion, invariantes, comparativa, pasos, modo, metodo, balanceadoOriginalmente } = ctx;
+  const { asignacion } = estadoSolucion;
+  const fecha = new Date().toLocaleString("es-MX");
+  const formulacion = construirFormulacion(modelo, metodo);
+  const valorTotal = calcularValorRealTotal(asignacion, modelo.costos, modelo.prohibidas);
+  const etiquetaTotal = modelo.objetivo === "maximizar" ? "Ganancia Total Resultante" : "Costo Total Resultante";
+  const etiquetaUnit = modelo.objetivo === "maximizar" ? "utilidad" : "costo";
+  const narrativa = construirResumenNarrativoDinamico({
+    modelo,
+    estadoSolucion,
+    invariantes,
+    pasos,
+    metodo,
+    varianteIdx: estadoAplicacion.varianteDiccionario
+  });
+
+  let html = `
+    <div class="pdf-encabezado">
       <h1>Modelos de Transporte — Reporte Completo de Solución</h1>
       <p><strong>Estudiante:</strong> ${escaparTexto(NOMBRE_ESTUDIANTE)} &nbsp;|&nbsp; <strong>Grupo:</strong> ${escaparTexto(GRUPO_ESTUDIANTE)}</p>
-      <p><strong>Objetivo:</strong> ${ctx.modelo.objetivo === "maximizar" ? "Maximizar Utilidades (Max Z)" : "Minimizar Costos (Min Z)"} &nbsp;|&nbsp; <strong>Método:</strong> ${escaparTexto(ctx.metodo)} &nbsp;|&nbsp; <strong>Fecha:</strong> ${escaparTexto(fecha)}</p>
-    `;
-  }
+      <p><strong>Objetivo:</strong> ${modelo.objetivo === "maximizar" ? "Maximizar Utilidades (Max Z)" : "Minimizar Costos (Min Z)"} &nbsp;|&nbsp; <strong>Método:</strong> ${escaparTexto(metodo)} &nbsp;|&nbsp; <strong>Modo:</strong> ${modo === "guiado" ? "Guiado" : "Global"} &nbsp;|&nbsp; <strong>Fecha:</strong> ${escaparTexto(fecha)}</p>
+    </div>
 
-  const prevVerTodos = estadoAplicacion.verTodosLosPasos;
-  const hayPasos = ctx.modo === "guiado" && estadoAplicacion.ultimosPasosRender.length > 0;
+    <div class="pdf-bloque">
+      <h2>1. Conceptos y Fórmulas Aplicadas</h2>
+      <div class="pdf-formula-item"><strong>Condición de Balance</strong><span>${escaparTexto(formulacion.balance)}</span></div>
+      <div class="pdf-formula-item"><strong>Función Objetivo</strong><span>${escaparTexto(formulacion.objetivo)}</span></div>
+      <div class="pdf-formula-item"><strong>Restricciones de Oferta y Demanda</strong><span>${escaparTexto(formulacion.restricciones)}</span></div>
+      <div class="pdf-formula-item"><strong>Regla del Método Seleccionado</strong><span>${escaparTexto(formulacion.metodo)}</span></div>
+    </div>
 
-  if (hayPasos && !prevVerTodos) {
-    estadoAplicacion.verTodosLosPasos = true;
-    renderizarContenedorPasos();
-  }
+    <div class="pdf-bloque">
+      <h2>2. Resumen de la Solución</h2>
+      <p><strong>${etiquetaTotal}:</strong> ${invariantes.infactiblePorProhibidas ? "Infactible (usa ruta M)" : formatearNumero(valorTotal)}</p>
+      <div class="pdf-alerta">${
+        invariantes.infactiblePorProhibidas
+          ? "El modelo es infactible bajo las restricciones de rutas prohibidas (usa ruta M)."
+          : invariantes.esValida
+          ? "Solución básica factible verificada (ofertas, demandas y condición m + n - 1 cumplidas)."
+          : `Incidencias de verificación: ${escaparTexto(invariantes.incidencias.join(" | "))}`
+      }</div>
+      ${
+        balanceadoOriginalmente
+          ? ""
+          : `<div class="pdf-alerta">Nota: El modelo fue balanceado automáticamente agregando un nodo ficticio con valor 0.</div>`
+      }
+      <ul class="pdf-lista">
+  `;
 
-  const restaurar = () => {
-    if (hayPasos && !prevVerTodos) {
-      estadoAplicacion.verTodosLosPasos = prevVerTodos;
-      renderizarContenedorPasos();
+  for (let i = 0; i < modelo.nombresOrigenes.length; i++) {
+    for (let j = 0; j < modelo.nombresDestinos.length; j++) {
+      if (asignacion[i][j] > EPS) {
+        if (modelo.prohibidas[i][j]) {
+          html += `<li><strong>${escaparTexto(modelo.nombresOrigenes[i])} &rarr; ${escaparTexto(modelo.nombresDestinos[j])}</strong>: ${formatearNumero(asignacion[i][j])} u. en Ruta Prohibida (M)</li>`;
+        } else {
+          const sub = redondearSiCero(asignacion[i][j] * modelo.costos[i][j]);
+          html += `<li><strong>${escaparTexto(modelo.nombresOrigenes[i])} &rarr; ${escaparTexto(modelo.nombresDestinos[j])}</strong>: ${formatearNumero(asignacion[i][j])} u. &times; ${etiquetaUnit} ${formatearNumero(modelo.costos[i][j])} = <strong>${formatearNumero(sub)}</strong></li>`;
+        }
+      }
     }
-    window.removeEventListener("afterprint", restaurar);
-  };
+  }
+  html += `</ul></div>`;
 
-  window.addEventListener("afterprint", restaurar);
-  setTimeout(() => window.print(), 60);
+  if (comparativa && comparativa.resultados?.length) {
+    html += `
+      <div class="pdf-bloque">
+        <h2>3. Comparativa de Eficiencia entre Métodos</h2>
+        <table class="pdf-tabla">
+          <thead><tr><th>Método</th><th>Valor Total (Z)</th><th>Iter. MODI</th><th>Brecha vs. Óptimo</th><th>Estado</th></tr></thead>
+          <tbody>
+    `;
+    for (const r of comparativa.resultados) {
+      const esOpt = !r.infactible && comparativa.mejorValor !== null && Math.abs(r.valorTotal - comparativa.mejorValor) <= EPS;
+      const dif = r.infactible || comparativa.mejorValor === null ? "-" : formatearNumero(Math.abs(r.valorTotal - comparativa.mejorValor));
+      html += `<tr><td>${escaparTexto(r.nombre)}</td><td>${r.infactible ? "Infactible" : formatearNumero(r.valorTotal)}</td><td>${r.iteracionesMODI}</td><td>${dif}</td><td>${r.infactible ? "Infactible" : esOpt ? "Óptimo" : "Factible"}</td></tr>`;
+    }
+    html += `</tbody></table></div>`;
+  }
+
+  html += `
+    <div class="pdf-bloque">
+      <h2>Tabla Final de Asignación</h2>
+      ${crearTablaPdfHtml(modelo, asignacion)}
+    </div>
+  `;
+
+  if (modo === "guiado" && pasos && pasos.length > 0) {
+    const etiqAcum = modelo.objetivo === "maximizar" ? "Ganancia acumulada" : "Costo acumulado";
+    html += `<div class="pdf-bloque"><h2>Desglose Paso a Paso (${pasos.length} pasos)</h2>`;
+    for (const paso of pasos) {
+      html += `
+        <div class="pdf-paso">
+          <div class="pdf-paso-cabecera">
+            <span>Paso ${paso.numero}: ${escaparTexto(paso.titulo)}</span>
+            <span class="pdf-paso-fase">${escaparTexto(paso.fase)}</span>
+          </div>
+          <p>${escaparTexto(paso.explicacion)}</p>
+          ${paso.formula ? `<p class="pdf-formula-mono">${escaparTexto(paso.formula)}</p>` : ""}
+          ${
+            paso.costoAcumulado !== null && paso.costoAcumulado !== undefined
+              ? `<p><strong>${etiqAcum}:</strong> ${formatearNumero(paso.costoAcumulado)}</p>`
+              : ""
+          }
+          ${paso.asignacion ? crearTablaPdfHtml(modelo, paso.asignacion) : ""}
+        </div>
+      `;
+    }
+    html += `</div>`;
+  }
+
+  html += `
+    <div class="pdf-bloque">
+      <h2>Variables de Decisión (xᵢⱼ) y Explicación Final</h2>
+      <table class="pdf-tabla pdf-tabla-compacta">
+        <thead><tr><th>Variable</th><th>Ruta</th><th>Unidades (xᵢⱼ)</th><th>Unitario / Subtotal</th><th>Estado</th></tr></thead>
+        <tbody>
+  `;
+  for (let i = 0; i < modelo.nombresOrigenes.length; i++) {
+    for (let j = 0; j < modelo.nombresDestinos.length; j++) {
+      const val = asignacion[i][j];
+      const esProh = modelo.prohibidas[i][j];
+      const esBas = estadoSolucion.basicas?.[i]?.[j] ?? false;
+      const sub = esProh ? "M" : formatearNumero(redondearSiCero(val * modelo.costos[i][j]));
+      const est = esProh ? "Prohibida (M)" : val > EPS ? "Activa" : esBas ? "Básica (ε)" : "Cero";
+      const cls = val > EPS ? "pdf-celda-activa" : "";
+      html += `<tr class="${cls}"><td>x<sub>${i + 1}${j + 1}</sub></td><td>${escaparTexto(modelo.nombresOrigenes[i])} &rarr; ${escaparTexto(modelo.nombresDestinos[j])}</td><td>${formatearNumero(val)}</td><td>${esProh ? "M" : `${formatearNumero(modelo.costos[i][j])} / ${sub}`}</td><td>${est}</td></tr>`;
+    }
+  }
+  html += `
+        </tbody>
+      </table>
+      <h3>${escaparTexto(narrativa.objetivoTexto)}</h3>
+      <p class="pdf-formula-mono">${escaparTexto(narrativa.formulaSumaTotal)}</p>
+      <h3>Explicación Detallada del Procedimiento</h3>
+  `;
+  for (const p of narrativa.parrafos) {
+    html += `<p class="pdf-parrafo">${escaparTexto(p)}</p>`;
+  }
+  html += `</div>`;
+
+  return html;
+}
+
+function prepararReportePdfSiExiste() {
+  const ctx = estadoAplicacion.ultimoResumenContexto;
+  const cont = document.getElementById("reportePdfImpresion");
+  if (!ctx || !cont) return false;
+  cont.innerHTML = construirReportePdfHtml(ctx);
+  return true;
+}
+
+function exportarResultadosPDF() {
+  if (!prepararReportePdfSiExiste()) return;
+  if (typeof requestAnimationFrame === "function") {
+    requestAnimationFrame(() => requestAnimationFrame(() => window.print()));
+  } else {
+    window.print();
+  }
 }
 
 if (typeof document !== "undefined") {
@@ -2612,6 +2777,7 @@ if (typeof document !== "undefined") {
       ctrl.addEventListener("change", reResolverSiVisible);
     });
 
+    window.addEventListener("beforeprint", prepararReportePdfSiExiste);
     window.addEventListener("pagehide", guardarEstadoLocalStorage);
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState === "hidden") {

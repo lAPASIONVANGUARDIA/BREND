@@ -774,114 +774,238 @@ main.contenedor {
   align-self: center;
 }
 
-.solo-impresion {
+.solo-impresion,
+.reporte-pdf-impresion {
   display: none;
 }
 
-/* ---------- ESTILOS DE IMPRESIÓN / EXPORTACIÓN A PDF ---------- */
+/* ---------- ESTILOS DE IMPRESIÓN / EXPORTACIÓN A PDF (iOS, ANDROID Y ESCRITORIO) ---------- */
 @page {
   size: letter;
-  margin: 12mm;
+  margin: 10mm;
 }
 
 @media print {
   * {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
+    box-sizing: border-box;
   }
 
+  html,
   body {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
     background: #ffffff !important;
     color: #1f1b24 !important;
-    font-size: 10.5pt;
-    line-height: 1.4;
+    font-size: 9.5pt;
+    line-height: 1.35;
+    overflow: visible !important;
   }
 
-  .encabezado,
-  main > section:not(#seccionResultados),
-  .no-imprimir,
-  .controles-pasos,
-  #btnCambiarRedaccion,
-  .pie-autor {
+  header.encabezado,
+  main,
+  footer.pie-autor {
     display: none !important;
   }
 
-  .contenedor {
+  .reporte-pdf-impresion {
+    display: block !important;
+    width: 100% !important;
     max-width: 100% !important;
-    padding: 0 !important;
-    margin: 0 !important;
+    overflow: visible !important;
   }
 
-  #seccionResultados {
-    display: block !important;
-    box-shadow: none !important;
-    border: none !important;
-    padding: 0 !important;
-    margin: 0 !important;
-  }
-
-  .solo-impresion {
-    display: block !important;
-    margin-bottom: 1rem;
-    padding: 0.75rem 1rem;
+  .pdf-encabezado {
+    margin-bottom: 10pt;
+    padding: 8pt 10pt;
     border: 1.5px solid #6b2d5c;
-    border-radius: 8px;
+    border-radius: 6pt;
     background-color: #faf6fc !important;
-  }
-
-  .solo-impresion h1 {
-    margin: 0 0 0.25rem 0;
-    font-size: 14pt;
-    color: #4a1c40;
-  }
-
-  .solo-impresion p {
-    margin: 0.15rem 0;
-    font-size: 9.5pt;
-  }
-
-  .rejilla-formulas {
-    grid-template-columns: 1fr 1fr !important;
-    gap: 0.5rem !important;
-  }
-
-  .rejilla-variables {
-    grid-template-columns: repeat(3, 1fr) !important;
-    gap: 0.45rem !important;
-  }
-
-  .caja-formula,
-  .resumen-solucion,
-  .bloque-comparativa,
-  .bloque-tabla-final,
-  .tarjeta-paso,
-  .tarjeta-variable,
-  .bloque-narrativa {
     break-inside: avoid;
     page-break-inside: avoid;
   }
 
-  .contenedor-tabla {
-    overflow: visible !important;
+  .pdf-encabezado h1 {
+    margin: 0 0 4pt 0;
+    font-size: 13pt;
+    color: #4a1c40;
   }
 
-  .tabla-transporte {
-    font-size: 9pt;
-    width: 100%;
+  .pdf-encabezado p {
+    margin: 2pt 0;
+    font-size: 8.8pt;
   }
 
-  .tabla-transporte th,
-  .tabla-transporte td {
-    padding: 0.3rem 0.45rem;
+  .pdf-bloque {
+    margin-bottom: 10pt;
   }
 
-  .tarjeta-paso {
-    margin-bottom: 0.75rem;
-    padding: 0.75rem;
+  .reporte-pdf-impresion h2 {
+    margin: 10pt 0 4pt 0;
+    padding-bottom: 2pt;
+    font-size: 11pt;
+    color: #4a1c40;
+    border-bottom: 1px solid #d7c7e2;
+    break-after: avoid;
+    page-break-after: avoid;
   }
 
-  .resumen-final-detallado {
-    margin-top: 1rem;
-    padding: 0.85rem;
+  .reporte-pdf-impresion h3 {
+    margin: 6pt 0 3pt 0;
+    font-size: 9.8pt;
+    color: #6b2d5c;
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+
+  .pdf-alerta {
+    padding: 4pt 7pt;
+    margin: 4pt 0;
+    border-radius: 4pt;
+    border: 1px solid #cbb7db;
+    background-color: #f8f4fb !important;
+    font-size: 8.5pt;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .pdf-formula-item {
+    padding: 5pt 7pt;
+    margin-bottom: 5pt;
+    border: 1px solid #d7c7e2;
+    border-radius: 4pt;
+    background-color: #faf7fc !important;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .pdf-formula-item strong {
+    display: block;
+    font-size: 8.5pt;
+    color: #6b2d5c;
+    margin-bottom: 2pt;
+  }
+
+  .pdf-formula-item span,
+  .pdf-formula-mono {
+    font-family: var(--fuente-mono);
+    font-size: 8.2pt;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  .pdf-tabla {
+    width: 100% !important;
+    min-width: 0 !important;
+    border-collapse: collapse;
+    table-layout: fixed !important;
+    margin: 5pt 0 8pt 0;
+    font-size: 8pt;
+  }
+
+  .pdf-tabla.pdf-tabla-compacta {
+    font-size: 6.6pt;
+  }
+
+  .pdf-tabla th,
+  .pdf-tabla td {
+    min-width: 0 !important;
+    width: auto !important;
+    padding: 3pt 4pt;
+    border: 1px solid #cbb7db;
+    text-align: center;
+    vertical-align: middle;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    white-space: normal;
+  }
+
+  .pdf-tabla.pdf-tabla-compacta th,
+  .pdf-tabla.pdf-tabla-compacta td {
+    padding: 2pt 2.5pt;
+  }
+
+  .pdf-tabla thead th {
+    background-color: #6b2d5c !important;
+    color: #ffffff !important;
+    font-weight: 700;
+  }
+
+  .pdf-tabla tbody th {
+    background-color: #f3eaf7 !important;
+    color: #4a1c40 !important;
+    font-weight: 700;
+  }
+
+  .pdf-tabla tr {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .pdf-celda-activa {
+    background-color: #f3eaf7 !important;
+    font-weight: 700;
+  }
+
+  .pdf-celda-prohibida {
+    background-color: #fdecef !important;
+    color: #8b1e3f !important;
+  }
+
+  .pdf-paso {
+    margin-bottom: 8pt;
+    padding: 6pt 8pt;
+    border: 1px solid #d7c7e2;
+    border-radius: 5pt;
+    background-color: #ffffff !important;
+  }
+
+  .pdf-paso-cabecera {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 6pt;
+    margin-bottom: 3pt;
+    font-weight: 700;
+    color: #4a1c40;
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+
+  .pdf-paso-fase {
+    font-size: 7.5pt;
+    padding: 1pt 5pt;
+    border-radius: 4pt;
+    background-color: #f3eaf7 !important;
+    color: #6b2d5c;
+  }
+
+  .pdf-paso p {
+    margin: 2pt 0;
+    font-size: 8.5pt;
+    overflow-wrap: anywhere;
+  }
+
+  .pdf-parrafo {
+    margin: 3pt 0;
+    font-size: 8.8pt;
+    overflow-wrap: anywhere;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .pdf-lista {
+    margin: 4pt 0 6pt 14pt;
+    padding: 0;
+    font-size: 8.5pt;
+  }
+
+  .pdf-lista li {
+    margin-bottom: 2pt;
+    break-inside: avoid;
+    page-break-inside: avoid;
   }
 }
