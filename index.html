@@ -16,8 +16,8 @@
         El sistema valida los datos, verifica el balance, muestra las fórmulas en cada etapa y resuelve paso a paso o de forma global.
       </p>
       <div class="ficha-estudiante" aria-label="Datos académicos">
-        <span><strong>Nombre:</strong> Brenda Margarita Ruiz González</span>
-        <span><strong>Grupo:</strong> DI12C</span>
+        <span><strong>Nombre:</strong> <span id="headerNombreEstudiante"></span></span>
+        <span><strong>Grupo:</strong> <span id="headerGrupoEstudiante"></span></span>
       </div>
     </div>
   </header>
@@ -187,12 +187,24 @@
         <button type="button" id="botonLimpiar" class="boton boton-neutro">
           Limpiar Valores
         </button>
+        <span id="estadoGuardado" class="estado-guardado" aria-live="polite"></span>
       </div>
     </section>
 
     <!-- BLOQUE 3: CONCEPTOS, FÓRMULAS Y RESULTADOS -->
     <section id="seccionResultados" class="tarjeta oculto" aria-labelledby="titulo-resultados">
-      <h2 id="titulo-resultados" tabindex="-1">3. Formulación, Lógica y Solución</h2>
+      <div id="encabezadoImpresion" class="solo-impresion"></div>
+      <div class="cabecera-tarjeta">
+        <h2 id="titulo-resultados" tabindex="-1">3. Formulación, Lógica y Solución</h2>
+        <div class="controles-pasos no-imprimir">
+          <button type="button" id="btnExportarExcel" class="boton boton-exito">
+            Exportar a Excel (.xlsx)
+          </button>
+          <button type="button" id="btnExportarPDF" class="boton boton-primario">
+            Exportar Todo a PDF
+          </button>
+        </div>
+      </div>
 
       <!-- Labels de conceptos y fórmulas dinámicas -->
       <div class="panel-formulas">
@@ -243,7 +255,7 @@
   <footer class="pie-autor">
     <div class="contenedor">
       <span>Modelos de Transporte (Programación Lineal)</span>
-      <span>Estudiante: <strong>Brenda Margarita Ruiz González</strong> | Grupo: <strong>DI12C</strong></span>
+      <span>Estudiante: <strong id="footerNombreEstudiante"></strong> | Grupo: <strong id="footerGrupoEstudiante"></strong></span>
     </div>
   </footer>
 

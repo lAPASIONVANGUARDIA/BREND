@@ -7,6 +7,10 @@
 
 const EPS = 1e-9;
 
+const NOMBRE_ESTUDIANTE = "Brenda Margarita Ruiz González";
+const GRUPO_ESTUDIANTE = "DI12C";
+const CLAVE_LOCAL_STORAGE = "transporte_app_estado_v1";
+
 const estadoAplicacion = {
   indicePasoActual: 0,
   verTodosLosPasos: false,
@@ -1369,15 +1373,19 @@ function renderizarResultados({
     modelo,
     estadoSolucion,
     invariantes,
+    comparativa,
     pasos,
+    modo,
     metodo,
     balanceadoOriginalmente
   };
   renderizarResumenFinalDetallado();
 
-  seccion.scrollIntoView({ behavior: "smooth", block: "start" });
-  const tituloRes = document.getElementById("titulo-resultados");
-  if (tituloRes) tituloRes.focus({ preventScroll: true });
+  if (!estadoAplicacion._restaurandoDesdeStorage) {
+    seccion.scrollIntoView({ behavior: "smooth", block: "start" });
+    const tituloRes = document.getElementById("titulo-resultados");
+    if (tituloRes) tituloRes.focus({ preventScroll: true });
+  }
 }
 
 /* ---------- 7B. DICCIONARIOS DINÁMICOS Y RESUMEN FINAL DETALLADO ---------- */
@@ -1726,6 +1734,7 @@ function renderizarResumenFinalDetallado() {
   document.getElementById("btnCambiarRedaccion")?.addEventListener("click", () => {
     estadoAplicacion.varianteDiccionario++;
     renderizarResumenFinalDetallado();
+    guardarEstadoLocalStorage();
   });
 }
 
@@ -1801,17 +1810,20 @@ function renderizarContenedorPasos() {
     if (estadoAplicacion.indicePasoActual > 0) {
       estadoAplicacion.indicePasoActual--;
       renderizarContenedorPasos();
+      guardarEstadoLocalStorage();
     }
   });
   document.getElementById("btnPasoSiguiente")?.addEventListener("click", () => {
     if (estadoAplicacion.indicePasoActual < total - 1) {
       estadoAplicacion.indicePasoActual++;
       renderizarContenedorPasos();
+      guardarEstadoLocalStorage();
     }
   });
   document.getElementById("btnAlternarVistaPasos")?.addEventListener("click", () => {
     estadoAplicacion.verTodosLosPasos = !estadoAplicacion.verTodosLosPasos;
     renderizarContenedorPasos();
+    guardarEstadoLocalStorage();
   });
 }
 
@@ -1870,6 +1882,7 @@ function ejecutarResolucion() {
     metodo,
     balanceadoOriginalmente
   });
+  guardarEstadoLocalStorage();
 }
 
 const EJEMPLOS_TRANSPORTE = {
@@ -1948,6 +1961,7 @@ function cargarEjemploSeleccionado() {
   const clave = selector ? selector.value : "managua";
   const datos = EJEMPLOS_TRANSPORTE[clave] || EJEMPLOS_TRANSPORTE.managua;
   generarTablaEntrada(datos);
+  guardarEstadoLocalStorage();
 }
 
 function cargarEjemploTalleresManagua() {
@@ -1962,33 +1976,647 @@ function limpiarCampos() {
   ocultarError();
   actualizarResumenBalancePrevio();
   document.getElementById("seccionResultados").classList.add("oculto");
+  estadoAplicacion.ultimoResumenContexto = null;
+  guardarEstadoLocalStorage();
 }
 
 function reResolverSiVisible() {
   const seccion = document.getElementById("seccionResultados");
   if (seccion && !seccion.classList.contains("oculto")) {
     ejecutarResolucion();
+  } else {
+    guardarEstadoLocalStorage();
   }
+}
+
+/* ---------- 9. DATOS ACADÉMICOS, PERSISTENCIA (LOCALSTORAGE) Y EXPORTACIONES ---------- */
+
+function inicializarDatosEstudiante() {
+  const nodos = {
+    headerNombreEstudiante: NOMBRE_ESTUDIANTE,
+    headerGrupoEstudiante: GRUPO_ESTUDIANTE,
+    footerNombreEstudiante: NOMBRE_ESTUDIANTE,
+    footerGrupoEstudiante: GRUPO_ESTUDIANTE
+  };
+  for (const [id, valor] of Object.entries(nodos)) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = valor;
+  }
+}
+
+function mostrarIndicadorGuardado(texto = "Avance guardado automáticamente") {
+  const el = document.getElementById("estadoGuardado");
+  if (!el) return;
+  const hora = new Date().toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" });
+  el.textContent = `${texto} (${hora})`;
+}
+
+function recopilarEstadoPersistible() {
+  const tabla = capturarValoresActualesTabla();
+  if (!tabla) return null;
+  const seccionResultados = document.getElementById("seccionResultados");
+  const resultadosVisibles = Boolean(seccionResultados && !seccionResultados.classList.contains("oculto"));
+
+  return {
+    version: 1,
+    timestamp: Date.now(),
+    objetivo: obtenerObjetivoSeleccionado(),
+    modo: obtenerModoSeleccionado(),
+    metodo: obtenerMetodoSeleccionado(),
+    mostrarComparativa: debeMostrarComparativa(),
+    ejemploSeleccionado: document.getElementById("selectorEjemplo")?.value || "managua",
+    filas: parseInt(document.getElementById("cantidadOrigenes")?.value, 10) || tabla.ofertas.length,
+    columnas: parseInt(document.getElementById("cantidadDestinos")?.value, 10) || tabla.demandas.length,
+    tabla,
+    resultadosVisibles,
+    indicePasoActual: estadoAplicacion.indicePasoActual,
+    verTodosLosPasos: estadoAplicacion.verTodosLosPasos,
+    varianteDiccionario: estadoAplicacion.varianteDiccionario
+  };
+}
+
+function guardarEstadoLocalStorage() {
+  if (typeof localStorage === "undefined" || typeof document === "undefined") return;
+  try {
+    const estado = recopilarEstadoPersistible();
+    if (!estado) return;
+    localStorage.setItem(CLAVE_LOCAL_STORAGE, JSON.stringify(estado));
+    mostrarIndicadorGuardado();
+  } catch {
+    // Ignorar errores de cuota o modo privado en Safari/iOS
+  }
+}
+
+function cargarEstadoLocalStorage() {
+  if (typeof localStorage === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(CLAVE_LOCAL_STORAGE);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object" || !parsed.tabla) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function aplicarEstadoGuardado(guardado) {
+  if (!guardado) return false;
+
+  const setRadio = (name, val) => {
+    if (!val) return;
+    const r = document.querySelector(`input[name="${name}"][value="${val}"]`);
+    if (r) r.checked = true;
+  };
+
+  setRadio("objetivoModelo", guardado.objetivo);
+  setRadio("modoResolucion", guardado.modo);
+  setRadio("metodoResolucion", guardado.metodo);
+
+  const checkComp = document.getElementById("checkComparativa");
+  if (checkComp && typeof guardado.mostrarComparativa === "boolean") {
+    checkComp.checked = guardado.mostrarComparativa;
+  }
+
+  const selector = document.getElementById("selectorEjemplo");
+  if (selector && guardado.ejemploSeleccionado) {
+    selector.value = guardado.ejemploSeleccionado;
+  }
+
+  const inputFilas = document.getElementById("cantidadOrigenes");
+  const inputCols = document.getElementById("cantidadDestinos");
+  if (inputFilas && guardado.filas) inputFilas.value = guardado.filas;
+  if (inputCols && guardado.columnas) inputCols.value = guardado.columnas;
+
+  generarTablaEntrada({
+    objetivo: guardado.objetivo,
+    nombresOrigenes: guardado.tabla.nombresOrigenes || [],
+    nombresDestinos: guardado.tabla.nombresDestinos || [],
+    costos: guardado.tabla.costos || [],
+    prohibidas: guardado.tabla.prohibidas || [],
+    ofertas: guardado.tabla.ofertas || [],
+    demandas: guardado.tabla.demandas || []
+  });
+
+  if (typeof guardado.varianteDiccionario === "number") {
+    estadoAplicacion.varianteDiccionario = guardado.varianteDiccionario;
+  }
+
+  if (guardado.resultadosVisibles) {
+    estadoAplicacion._restaurandoDesdeStorage = true;
+    try {
+      ejecutarResolucion();
+      if (typeof guardado.verTodosLosPasos === "boolean") {
+        estadoAplicacion.verTodosLosPasos = guardado.verTodosLosPasos;
+      }
+      if (typeof guardado.indicePasoActual === "number") {
+        estadoAplicacion.indicePasoActual = guardado.indicePasoActual;
+      }
+      if (obtenerModoSeleccionado() === "guiado") {
+        renderizarContenedorPasos();
+      }
+    } finally {
+      estadoAplicacion._restaurandoDesdeStorage = false;
+    }
+  }
+
+  mostrarIndicadorGuardado("Sesión restaurada");
+  return true;
+}
+
+/* ---------- EXPORTACIÓN A EXCEL (.XLSX) SIN DEPENDENCIAS EXTERNAS ---------- */
+
+function limpiarTextoXml(texto) {
+  return String(texto ?? "")
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+function indiceAColumnaExcel(idx) {
+  let n = idx + 1;
+  let col = "";
+  while (n > 0) {
+    const rem = (n - 1) % 26;
+    col = String.fromCharCode(65 + rem) + col;
+    n = Math.floor((n - 1) / 26);
+  }
+  return col;
+}
+
+function construirHojaXml(filas, estilosPorFila = {}) {
+  const anchos = [];
+  for (const fila of filas) {
+    for (let c = 0; c < fila.length; c++) {
+      const len = String(fila[c] ?? "").length;
+      anchos[c] = Math.min(60, Math.max(anchos[c] || 10, len + 3));
+    }
+  }
+
+  const colsXml = anchos.length
+    ? `<cols>${anchos
+        .map((w, i) => `<col min="${i + 1}" max="${i + 1}" width="${w}" customWidth="1"/>`)
+        .join("")}</cols>`
+    : "";
+
+  let rowsXml = "";
+  for (let r = 0; r < filas.length; r++) {
+    const fila = filas[r];
+    const estilo = estilosPorFila[r] ?? 0;
+    let cellsXml = "";
+    for (let c = 0; c < fila.length; c++) {
+      const val = fila[c];
+      if (val === null || val === undefined || val === "") continue;
+      const ref = `${indiceAColumnaExcel(c)}${r + 1}`;
+      const sAttr = estilo ? ` s="${estilo}"` : "";
+      if (typeof val === "number" && Number.isFinite(val)) {
+        cellsXml += `<c r="${ref}"${sAttr} t="n"><v>${val}</v></c>`;
+      } else {
+        cellsXml += `<c r="${ref}"${sAttr} t="inlineStr"><is><t xml:space="preserve">${limpiarTextoXml(val)}</t></is></c>`;
+      }
+    }
+    rowsXml += `<row r="${r + 1}">${cellsXml}</row>`;
+  }
+
+  return (
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">` +
+    colsXml +
+    `<sheetData>${rowsXml}</sheetData>` +
+    `</worksheet>`
+  );
+}
+
+const TABLA_CRC32 = (() => {
+  const tabla = new Uint32Array(256);
+  for (let i = 0; i < 256; i++) {
+    let c = i;
+    for (let k = 0; k < 8; k++) {
+      c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    }
+    tabla[i] = c >>> 0;
+  }
+  return tabla;
+})();
+
+function calcularCrc32(bytes) {
+  let crc = 0xffffffff;
+  for (let i = 0; i < bytes.length; i++) {
+    crc = TABLA_CRC32[(crc ^ bytes[i]) & 0xff] ^ (crc >>> 8);
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function crearZipAlmacenado(archivos) {
+  const encoder = new TextEncoder();
+  const entradas = archivos.map((a) => ({
+    nombreBytes: encoder.encode(a.nombre),
+    datosBytes: typeof a.contenido === "string" ? encoder.encode(a.contenido) : a.contenido
+  }));
+
+  const partesLocales = [];
+  const partesCentrales = [];
+  let offset = 0;
+
+  for (const e of entradas) {
+    const crc = calcularCrc32(e.datosBytes);
+    const tam = e.datosBytes.length;
+    const nomLen = e.nombreBytes.length;
+
+    const localHeader = new Uint8Array(30 + nomLen);
+    const lv = new DataView(localHeader.buffer);
+    lv.setUint32(0, 0x04034b50, true);
+    lv.setUint16(4, 20, true);
+    lv.setUint16(6, 0x0800, true); // UTF-8
+    lv.setUint16(8, 0, true); // STORE
+    lv.setUint16(10, 0, true);
+    lv.setUint16(12, 0, true);
+    lv.setUint32(14, crc, true);
+    lv.setUint32(18, tam, true);
+    lv.setUint32(22, tam, true);
+    lv.setUint16(26, nomLen, true);
+    lv.setUint16(28, 0, true);
+    localHeader.set(e.nombreBytes, 30);
+
+    partesLocales.push(localHeader, e.datosBytes);
+
+    const centralHeader = new Uint8Array(46 + nomLen);
+    const cv = new DataView(centralHeader.buffer);
+    cv.setUint32(0, 0x02014b50, true);
+    cv.setUint16(4, 20, true);
+    cv.setUint16(6, 20, true);
+    cv.setUint16(8, 0x0800, true);
+    cv.setUint16(10, 0, true);
+    cv.setUint16(12, 0, true);
+    cv.setUint16(14, 0, true);
+    cv.setUint32(16, crc, true);
+    cv.setUint32(20, tam, true);
+    cv.setUint32(24, tam, true);
+    cv.setUint16(28, nomLen, true);
+    cv.setUint16(30, 0, true);
+    cv.setUint16(32, 0, true);
+    cv.setUint16(34, 0, true);
+    cv.setUint16(36, 0, true);
+    cv.setUint32(38, 0, true);
+    cv.setUint32(42, offset, true);
+    centralHeader.set(e.nombreBytes, 46);
+
+    partesCentrales.push(centralHeader);
+    offset += localHeader.length + tam;
+  }
+
+  const centralSize = partesCentrales.reduce((acc, p) => acc + p.length, 0);
+  const eocd = new Uint8Array(22);
+  const ev = new DataView(eocd.buffer);
+  ev.setUint32(0, 0x06054b50, true);
+  ev.setUint16(4, 0, true);
+  ev.setUint16(6, 0, true);
+  ev.setUint16(8, entradas.length, true);
+  ev.setUint16(10, entradas.length, true);
+  ev.setUint32(12, centralSize, true);
+  ev.setUint32(16, offset, true);
+  ev.setUint16(20, 0, true);
+
+  const totalLen = offset + centralSize + eocd.length;
+  const resultado = new Uint8Array(totalLen);
+  let pos = 0;
+  for (const p of [...partesLocales, ...partesCentrales, eocd]) {
+    resultado.set(p, pos);
+    pos += p.length;
+  }
+  return resultado;
+}
+
+function construirXlsxBytes(hojas) {
+  const archivos = [];
+  const overrides = hojas
+    .map(
+      (_, idx) =>
+        `<Override PartName="/xl/worksheets/sheet${idx + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`
+    )
+    .join("");
+
+  archivos.push({
+    nombre: "[Content_Types].xml",
+    contenido:
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">` +
+      `<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>` +
+      `<Default Extension="xml" ContentType="application/xml"/>` +
+      `<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>` +
+      `<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>` +
+      overrides +
+      `</Types>`
+  });
+
+  archivos.push({
+    nombre: "_rels/.rels",
+    contenido:
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+      `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>` +
+      `</Relationships>`
+  });
+
+  archivos.push({
+    nombre: "xl/styles.xml",
+    contenido:
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">` +
+      `<fonts count="3">` +
+      `<font><sz val="11"/><name val="Calibri"/></font>` +
+      `<font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font>` +
+      `<font><b/><sz val="13"/><color rgb="FF4A1C40"/><name val="Calibri"/></font>` +
+      `</fonts>` +
+      `<fills count="3">` +
+      `<fill><patternFill patternType="none"/></fill>` +
+      `<fill><patternFill patternType="gray125"/></fill>` +
+      `<fill><patternFill patternType="solid"><fgColor rgb="FF6B2D5C"/></patternFill></fill>` +
+      `</fills>` +
+      `<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>` +
+      `<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>` +
+      `<cellXfs count="3">` +
+      `<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>` +
+      `<xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/>` +
+      `<xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1"/>` +
+      `</cellXfs>` +
+      `</styleSheet>`
+  });
+
+  const sheetsXml = hojas
+    .map(
+      (h, idx) =>
+        `<sheet name="${limpiarTextoXml(h.nombre.slice(0, 31))}" sheetId="${idx + 1}" r:id="rId${idx + 1}"/>`
+    )
+    .join("");
+
+  archivos.push({
+    nombre: "xl/workbook.xml",
+    contenido:
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">` +
+      `<sheets>${sheetsXml}</sheets>` +
+      `</workbook>`
+  });
+
+  const relsXml =
+    hojas
+      .map(
+        (_, idx) =>
+          `<Relationship Id="rId${idx + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${idx + 1}.xml"/>`
+      )
+      .join("") +
+    `<Relationship Id="rId${hojas.length + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>`;
+
+  archivos.push({
+    nombre: "xl/_rels/workbook.xml.rels",
+    contenido:
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${relsXml}</Relationships>`
+  });
+
+  hojas.forEach((h, idx) => {
+    archivos.push({
+      nombre: `xl/worksheets/sheet${idx + 1}.xml`,
+      contenido: construirHojaXml(h.filas, h.estilos || {})
+    });
+  });
+
+  return crearZipAlmacenado(archivos);
+}
+
+function exportarResultadosExcel() {
+  const ctx = estadoAplicacion.ultimoResumenContexto;
+  if (!ctx) return;
+
+  const { modelo, estadoSolucion, invariantes, comparativa, pasos, modo, metodo, balanceadoOriginalmente } = ctx;
+  const { asignacion } = estadoSolucion;
+  const valorTotal = calcularValorRealTotal(asignacion, modelo.costos, modelo.prohibidas);
+  const formulacion = construirFormulacion(modelo, metodo);
+  const narrativa = construirResumenNarrativoDinamico({
+    modelo,
+    estadoSolucion,
+    invariantes,
+    pasos,
+    metodo,
+    varianteIdx: estadoAplicacion.varianteDiccionario
+  });
+  const fechaStr = new Date().toLocaleString("es-MX");
+
+  // Hoja 1: Resumen
+  const filasResumen = [
+    ["Modelos de Transporte - Reporte de Resultados"],
+    ["Estudiante", NOMBRE_ESTUDIANTE],
+    ["Grupo", GRUPO_ESTUDIANTE],
+    ["Fecha de exportación", fechaStr],
+    [],
+    ["Parámetro", "Valor"],
+    ["Objetivo", modelo.objetivo === "maximizar" ? "Maximizar Utilidades (Max Z)" : "Minimizar Costos (Min Z)"],
+    ["Método", metodo],
+    ["Modo", modo === "guiado" ? "Guiado / Paso a Paso" : "Global / Directo"],
+    ["Balanceado originalmente", balanceadoOriginalmente ? "Sí" : "No (se agregó nodo ficticio)"],
+    ["Estado de Factibilidad", invariantes.infactiblePorProhibidas ? "Infactible (usa ruta M)" : invariantes.esValida ? "Solución básica factible" : "Con incidencias"],
+    [modelo.objetivo === "maximizar" ? "Ganancia Total (Z)" : "Costo Total (Z)", invariantes.infactiblePorProhibidas ? "Infactible" : valorTotal],
+    [],
+    ["Conceptos y Fórmulas", "Detalle"],
+    ["Condición de Balance", formulacion.balance],
+    ["Función Objetivo", formulacion.objetivo],
+    ["Restricciones", formulacion.restricciones],
+    ["Regla del Método", formulacion.metodo],
+    ["Suma Total", narrativa.formulaSumaTotal],
+    [],
+    ["Explicación Detallada"]
+  ];
+  narrativa.parrafos.forEach((p) => filasResumen.push([p]));
+
+  // Hoja 2: Matriz Final
+  const filasMatriz = [
+    ["Matriz Final de Asignación (Unidades x_ij y Valor Unitario c_ij)"],
+    ["Origen \\ Destino", ...modelo.nombresDestinos, "Oferta"]
+  ];
+  for (let i = 0; i < modelo.nombresOrigenes.length; i++) {
+    const row = [modelo.nombresOrigenes[i]];
+    for (let j = 0; j < modelo.nombresDestinos.length; j++) {
+      const cTexto = modelo.prohibidas[i][j] ? "M" : formatearNumero(modelo.costos[i][j]);
+      row.push(`${formatearNumero(asignacion[i][j])} (c=${cTexto})`);
+    }
+    row.push(modelo.ofertas[i]);
+    filasMatriz.push(row);
+  }
+  const totalOferta = redondearSiCero(modelo.ofertas.reduce((a, b) => a + b, 0));
+  filasMatriz.push(["Demanda", ...modelo.demandas, totalOferta]);
+  filasMatriz.push([]);
+  filasMatriz.push(["Matriz Numérica de Unidades Asignadas (x_ij)"]);
+  filasMatriz.push(["Origen \\ Destino", ...modelo.nombresDestinos, "Oferta"]);
+  for (let i = 0; i < modelo.nombresOrigenes.length; i++) {
+    filasMatriz.push([modelo.nombresOrigenes[i], ...asignacion[i].map((v) => redondearSiCero(v)), modelo.ofertas[i]]);
+  }
+  filasMatriz.push(["Demanda", ...modelo.demandas, totalOferta]);
+
+  // Hoja 3: Variables x_ij
+  const filasVars = [
+    ["Detalle de Variables de Decisión (x_ij)"],
+    ["Variable", "Origen", "Destino", "Unidades (x_ij)", "Valor Unitario (c_ij)", "Subtotal", "Estado"]
+  ];
+  for (let i = 0; i < modelo.nombresOrigenes.length; i++) {
+    for (let j = 0; j < modelo.nombresDestinos.length; j++) {
+      const val = redondearSiCero(asignacion[i][j]);
+      const esProh = modelo.prohibidas[i][j];
+      const esBas = estadoSolucion.basicas?.[i]?.[j] ?? false;
+      const estadoVar = esProh ? (val > EPS ? "Ruta Prohibida (M)" : "Prohibida (M)") : val > EPS ? "Activa" : esBas ? "Básica (ε)" : "Cero";
+      filasVars.push([
+        `x_${i + 1}${j + 1}`,
+        modelo.nombresOrigenes[i],
+        modelo.nombresDestinos[j],
+        val,
+        esProh ? "M" : modelo.costos[i][j],
+        esProh ? "M" : redondearSiCero(val * modelo.costos[i][j]),
+        estadoVar
+      ]);
+    }
+  }
+  filasVars.push(["TOTAL", "", "", "", "", invariantes.infactiblePorProhibidas ? "Infactible" : valorTotal, ""]);
+
+  const hojas = [
+    { nombre: "Resumen", filas: filasResumen, estilos: { 0: 2, 5: 1, 13: 1, 20: 1 } },
+    { nombre: "Matriz Final", filas: filasMatriz, estilos: { 0: 2, 1: 1, [modelo.nombresOrigenes.length + 4]: 2, [modelo.nombresOrigenes.length + 5]: 1 } },
+    { nombre: "Variables", filas: filasVars, estilos: { 0: 2, 1: 1, [filasVars.length - 1]: 1 } }
+  ];
+
+  // Hoja 4: Comparativa (si existe)
+  if (comparativa && comparativa.resultados?.length) {
+    const filasComp = [
+      ["Comparativa de Eficiencia entre Métodos"],
+      ["Método", "Valor Total (Z)", "Iteraciones MODI", "Brecha vs. Óptimo", "Estado"]
+    ];
+    comparativa.resultados.forEach((r) => {
+      const esOpt = !r.infactible && comparativa.mejorValor !== null && Math.abs(r.valorTotal - comparativa.mejorValor) <= EPS;
+      const dif = r.infactible || comparativa.mejorValor === null ? "-" : redondearSiCero(Math.abs(r.valorTotal - comparativa.mejorValor));
+      filasComp.push([
+        r.nombre,
+        r.infactible ? "Infactible" : r.valorTotal,
+        r.iteracionesMODI,
+        dif,
+        r.infactible ? "Infactible" : esOpt ? "Óptimo" : "Factible"
+      ]);
+    });
+    hojas.push({ nombre: "Comparativa", filas: filasComp, estilos: { 0: 2, 1: 1 } });
+  }
+
+  // Hoja 5: Paso a Paso (si hay pasos)
+  if (pasos && pasos.length > 0) {
+    const filasPasos = [
+      ["Desglose Paso a Paso"],
+      ["Paso #", "Fase", "Título", "Explicación", "Fórmula", "Acumulado"]
+    ];
+    pasos.forEach((p) => {
+      filasPasos.push([
+        p.numero,
+        p.fase,
+        p.titulo,
+        p.explicacion,
+        p.formula || "",
+        p.costoAcumulado !== null && p.costoAcumulado !== undefined ? p.costoAcumulado : ""
+      ]);
+    });
+    hojas.push({ nombre: "Paso a Paso", filas: filasPasos, estilos: { 0: 2, 1: 1 } });
+  }
+
+  const bytes = construirXlsxBytes(hojas);
+  const blob = new Blob([bytes], {
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  const limpioNombre = NOMBRE_ESTUDIANTE.replace(/[^a-zA-Z0-9_-]+/g, "_");
+  const limpioGrupo = GRUPO_ESTUDIANTE.replace(/[^a-zA-Z0-9_-]+/g, "_");
+  const fechaArchivo = new Date().toISOString().slice(0, 10);
+  a.href = url;
+  a.download = `Transporte_${limpioNombre}_${limpioGrupo}_${fechaArchivo}.xlsx`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+}
+
+/* ---------- EXPORTACIÓN COMPLETA Y ORDENADA A PDF ---------- */
+
+function exportarResultadosPDF() {
+  const ctx = estadoAplicacion.ultimoResumenContexto;
+  if (!ctx) return;
+
+  const encImpresion = document.getElementById("encabezadoImpresion");
+  if (encImpresion) {
+    const fecha = new Date().toLocaleString("es-MX");
+    encImpresion.innerHTML = `
+      <h1>Modelos de Transporte — Reporte Completo de Solución</h1>
+      <p><strong>Estudiante:</strong> ${escaparTexto(NOMBRE_ESTUDIANTE)} &nbsp;|&nbsp; <strong>Grupo:</strong> ${escaparTexto(GRUPO_ESTUDIANTE)}</p>
+      <p><strong>Objetivo:</strong> ${ctx.modelo.objetivo === "maximizar" ? "Maximizar Utilidades (Max Z)" : "Minimizar Costos (Min Z)"} &nbsp;|&nbsp; <strong>Método:</strong> ${escaparTexto(ctx.metodo)} &nbsp;|&nbsp; <strong>Fecha:</strong> ${escaparTexto(fecha)}</p>
+    `;
+  }
+
+  const prevVerTodos = estadoAplicacion.verTodosLosPasos;
+  const hayPasos = ctx.modo === "guiado" && estadoAplicacion.ultimosPasosRender.length > 0;
+
+  if (hayPasos && !prevVerTodos) {
+    estadoAplicacion.verTodosLosPasos = true;
+    renderizarContenedorPasos();
+  }
+
+  const restaurar = () => {
+    if (hayPasos && !prevVerTodos) {
+      estadoAplicacion.verTodosLosPasos = prevVerTodos;
+      renderizarContenedorPasos();
+    }
+    window.removeEventListener("afterprint", restaurar);
+  };
+
+  window.addEventListener("afterprint", restaurar);
+  setTimeout(() => window.print(), 60);
 }
 
 if (typeof document !== "undefined") {
   document.addEventListener("DOMContentLoaded", () => {
-    generarTablaEntrada();
+    inicializarDatosEstudiante();
 
-    document.getElementById("botonGenerarTabla").addEventListener("click", () => generarTablaEntrada());
+    const guardado = cargarEstadoLocalStorage();
+    if (!aplicarEstadoGuardado(guardado)) {
+      generarTablaEntrada();
+      guardarEstadoLocalStorage();
+    }
+
+    document.getElementById("botonGenerarTabla").addEventListener("click", () => {
+      generarTablaEntrada();
+      guardarEstadoLocalStorage();
+    });
     document.getElementById("botonCargarEjemplo").addEventListener("click", cargarEjemploSeleccionado);
     document.getElementById("botonResolver").addEventListener("click", ejecutarResolucion);
     document.getElementById("botonLimpiar").addEventListener("click", limpiarCampos);
+    document.getElementById("btnExportarExcel")?.addEventListener("click", exportarResultadosExcel);
+    document.getElementById("btnExportarPDF")?.addEventListener("click", exportarResultadosPDF);
 
     document.getElementById("contenedorTablaEntrada").addEventListener("input", () => {
       actualizarResumenBalancePrevio();
+      guardarEstadoLocalStorage();
     });
+
+    document.getElementById("selectorEjemplo")?.addEventListener("change", guardarEstadoLocalStorage);
 
     const controlesReactivos = document.querySelectorAll(
       'input[name="objetivoModelo"], input[name="modoResolucion"], input[name="metodoResolucion"], #checkComparativa'
     );
     controlesReactivos.forEach((ctrl) => {
       ctrl.addEventListener("change", reResolverSiVisible);
+    });
+
+    window.addEventListener("pagehide", guardarEstadoLocalStorage);
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "hidden") {
+        guardarEstadoLocalStorage();
+      }
     });
 
     document.addEventListener("keydown", (ev) => {
@@ -2000,6 +2628,7 @@ if (typeof document !== "undefined") {
         ev.preventDefault();
         estadoAplicacion.indicePasoActual--;
         renderizarContenedorPasos();
+        guardarEstadoLocalStorage();
       } else if (
         ev.key === "ArrowRight" &&
         estadoAplicacion.indicePasoActual < estadoAplicacion.ultimosPasosRender.length - 1
@@ -2007,6 +2636,7 @@ if (typeof document !== "undefined") {
         ev.preventDefault();
         estadoAplicacion.indicePasoActual++;
         renderizarContenedorPasos();
+        guardarEstadoLocalStorage();
       }
     });
   });
@@ -2014,6 +2644,8 @@ if (typeof document !== "undefined") {
 
 if (typeof module !== "undefined" && module.exports) {
   module.exports = {
+    NOMBRE_ESTUDIANTE,
+    GRUPO_ESTUDIANTE,
     balancearModelo,
     resolverEsquinaNoroeste,
     resolverCostoMenor,
@@ -2027,6 +2659,7 @@ if (typeof module !== "undefined" && module.exports) {
     validarModelo,
     EJEMPLOS_TRANSPORTE,
     DICCIONARIO_NARRATIVO,
-    construirResumenNarrativoDinamico
+    construirResumenNarrativoDinamico,
+    construirXlsxBytes
   };
 }

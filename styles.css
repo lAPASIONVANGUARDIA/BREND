@@ -766,3 +766,122 @@ main.contenedor {
   justify-content: space-between;
   gap: 0.5rem 1.25rem;
 }
+
+.estado-guardado {
+  font-size: 0.85rem;
+  color: var(--texto-secundario);
+  margin-left: auto;
+  align-self: center;
+}
+
+.solo-impresion {
+  display: none;
+}
+
+/* ---------- ESTILOS DE IMPRESIÓN / EXPORTACIÓN A PDF ---------- */
+@page {
+  size: letter;
+  margin: 12mm;
+}
+
+@media print {
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  body {
+    background: #ffffff !important;
+    color: #1f1b24 !important;
+    font-size: 10.5pt;
+    line-height: 1.4;
+  }
+
+  .encabezado,
+  main > section:not(#seccionResultados),
+  .no-imprimir,
+  .controles-pasos,
+  #btnCambiarRedaccion,
+  .pie-autor {
+    display: none !important;
+  }
+
+  .contenedor {
+    max-width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  #seccionResultados {
+    display: block !important;
+    box-shadow: none !important;
+    border: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  .solo-impresion {
+    display: block !important;
+    margin-bottom: 1rem;
+    padding: 0.75rem 1rem;
+    border: 1.5px solid #6b2d5c;
+    border-radius: 8px;
+    background-color: #faf6fc !important;
+  }
+
+  .solo-impresion h1 {
+    margin: 0 0 0.25rem 0;
+    font-size: 14pt;
+    color: #4a1c40;
+  }
+
+  .solo-impresion p {
+    margin: 0.15rem 0;
+    font-size: 9.5pt;
+  }
+
+  .rejilla-formulas {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 0.5rem !important;
+  }
+
+  .rejilla-variables {
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 0.45rem !important;
+  }
+
+  .caja-formula,
+  .resumen-solucion,
+  .bloque-comparativa,
+  .bloque-tabla-final,
+  .tarjeta-paso,
+  .tarjeta-variable,
+  .bloque-narrativa {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .contenedor-tabla {
+    overflow: visible !important;
+  }
+
+  .tabla-transporte {
+    font-size: 9pt;
+    width: 100%;
+  }
+
+  .tabla-transporte th,
+  .tabla-transporte td {
+    padding: 0.3rem 0.45rem;
+  }
+
+  .tarjeta-paso {
+    margin-bottom: 0.75rem;
+    padding: 0.75rem;
+  }
+
+  .resumen-final-detallado {
+    margin-top: 1rem;
+    padding: 0.85rem;
+  }
+}
